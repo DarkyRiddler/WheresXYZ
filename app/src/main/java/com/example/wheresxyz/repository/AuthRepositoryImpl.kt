@@ -17,7 +17,7 @@ class AuthRepositoryImpl @Inject constructor(
             val response = apiService.login(request)
             if (response.isSuccessful && response.body() != null) {
                 val authData = response.body()!!
-                tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
+                tokenManager.saveToken(authData.accessToken, authData.refreshToken, authData.expiresIn.toLong())
                 Result.success(authData)
             } else {
                 Result.failure(Exception("Login failed: ${response.code()}"))
@@ -32,7 +32,7 @@ class AuthRepositoryImpl @Inject constructor(
             val response = apiService.register(request)
             if (response.isSuccessful && response.body() != null) {
                 val authData = response.body()!!
-                tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
+                tokenManager.saveToken(authData.accessToken, authData.refreshToken, authData.expiresIn.toLong())
                 Result.success(authData)
             } else {
                 Result.failure(Exception("Registration failed: ${response.code()}"))
@@ -47,7 +47,7 @@ class AuthRepositoryImpl @Inject constructor(
             val response = apiService.loginOAuth(request)
             if (response.isSuccessful && response.body() != null) {
                 val authData = response.body()!!
-                tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
+                tokenManager.saveToken(authData.accessToken, authData.refreshToken, authData.expiresIn.toLong())
                 Result.success(authData)
             } else {
                 Result.failure(Exception("OAuth login failed: ${response.code()}"))
@@ -58,10 +58,10 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     override suspend fun logout() {
-        tokenManager.clearTokens()
+        tokenManager.clearToken()
     }
 
     override suspend fun getAccessToken(): String? {
-        return tokenManager.accessToken.first()
+        return tokenManager.getToken()
     }
 }
