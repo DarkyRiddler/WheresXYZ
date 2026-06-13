@@ -42,7 +42,15 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.maps.android.compose.rememberMarkerState
+import com.example.wheresxyz.data.model.User
 import com.example.wheresxyz.ui.theme.*
+import com.example.wheresxyz.ui.viewmodel.LocationSyncState
+import com.example.wheresxyz.ui.viewmodel.LocationSyncViewModel
+import com.example.wheresxyz.ui.viewmodel.RemoteParticipant
+import com.example.wheresxyz.util.GeoPoint
+import com.example.wheresxyz.util.calculateOffsetLatLng
+import com.example.wheresxyz.util.formatDistanceMeters
+import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.delay
 
 data class RadarParticipant(
@@ -62,31 +70,22 @@ data class EventItem(
     val participants: List<RadarParticipant>
 )
 
-// Math helper to calculate a GPS point offset by distance and bearing
-fun calculateOffsetLatLng(base: LatLng, distanceMeters: Double, bearingDegrees: Double): LatLng {
-    val earthRadius = 6371000.0 // meters
-    val angularDistance = distanceMeters / earthRadius
-    val bearingRad = Math.toRadians(bearingDegrees)
-    
-    val lat1 = Math.toRadians(base.latitude)
-    val lon1 = Math.toRadians(base.longitude)
-    
-    val lat2 = Math.asin(
-        Math.sin(lat1) * Math.cos(angularDistance) +
-        Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearingRad)
+// Math helper kept for fallback mock mode — see util/LocationMath.kt for shared implementation
+private fun offsetFromBase(base: LatLng, distanceMeters: Int, angleDegrees: Double): LatLng {
+    val offset = calculateOffsetLatLng(
+        GeoPoint(base.latitude, base.longitude),
+        distanceMeters.toDouble(),
+        angleDegrees
     )
-    
-    val lon2 = lon1 + Math.atan2(
-        Math.sin(bearingRad) * Math.sin(angularDistance) * Math.cos(lat1),
-        Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2)
-    )
-    
-    return LatLng(Math.toDegrees(lat2), Math.toDegrees(lon2))
+    return LatLng(offset.latitude, offset.longitude)
 }
 
 @Composable
 fun LiveLocationMapView(
-    participants: List<RadarParticipant>,
+    remoteParticipants: List<RemoteParticipant>,
+    fallbackParticipants: List<RadarParticipant>,
+    syncState: LocationSyncState,
+    onLocationUpdate: (Double, Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -112,6 +111,7 @@ fun LiveLocationMapView(
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 userLatLng = LatLng(location.latitude, location.longitude)
+                onLocationUpdate(location.latitude, location.longitude)
             }
             override fun onProviderEnabled(provider: String) {}
             override fun onProviderDisabled(provider: String) {}
@@ -130,6 +130,7 @@ fun LiveLocationMapView(
                 }
                 bestLocation?.let {
                     userLatLng = LatLng(it.latitude, it.longitude)
+                    onLocationUpdate(it.latitude, it.longitude)
                 }
 
                 locationManager.requestLocationUpdates(
@@ -179,18 +180,28 @@ fun LiveLocationMapView(
                 title = "Ty (Twoja lokalizacja)"
             )
 
-            // Participants markers
-            participants.forEach { participant ->
-                val participantLatLng = calculateOffsetLatLng(
-                    userLatLng,
-                    participant.distanceMeters.toDouble(),
-                    participant.angleDegrees
-                )
-                Marker(
-                    state = rememberMarkerState(position = participantLatLng),
-                    title = participant.name,
-                    snippet = "Odległość: ${if (participant.distanceMeters >= 1000) String.format("%.1f km", participant.distanceMeters / 1000f) else "${participant.distanceMeters}m"}"
-                )
+            // Remote participants (Firebase sync) or fallback mock offsets
+            if (syncState == LocationSyncState.Active) {
+                remoteParticipants.forEach { participant ->
+                    Marker(
+                        state = rememberMarkerState(position = LatLng(participant.latitude, participant.longitude)),
+                        title = participant.displayName,
+                        snippet = "Odległość: ${formatDistanceMeters(participant.distanceMeters)}"
+                    )
+                }
+            } else {
+                fallbackParticipants.forEach { participant ->
+                    val participantLatLng = offsetFromBase(
+                        userLatLng,
+                        participant.distanceMeters,
+                        participant.angleDegrees
+                    )
+                    Marker(
+                        state = rememberMarkerState(position = participantLatLng),
+                        title = participant.name,
+                        snippet = "Odległość: ${formatDistanceMeters(participant.distanceMeters)}"
+                    )
+                }
             }
         }
 
@@ -236,17 +247,28 @@ fun LiveLocationMapView(
                 }
             }
         } else {
-            // Optional banner indicating real-time GPS is active
+            val syncLabel = when (syncState) {
+                LocationSyncState.Active -> "SYNCH. LOKALIZACJI AKTYWNA"
+                LocationSyncState.Connecting -> "ŁĄCZENIE Z SYNCH..."
+                LocationSyncState.Fallback -> "LOKALIZACJA GPS (TRYB DEMO)"
+                LocationSyncState.Idle -> "LOKALIZACJA GPS AKTYWNA"
+            }
+            val syncColor = when (syncState) {
+                LocationSyncState.Active -> SuccessGreen
+                LocationSyncState.Connecting -> BrandCyan
+                LocationSyncState.Fallback -> BrandRose
+                LocationSyncState.Idle -> SuccessGreen
+            }
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(8.dp)
-                    .background(SuccessGreen.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
-                    .border(1.dp, SuccessGreen, RoundedCornerShape(8.dp))
+                    .background(syncColor.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
+                    .border(1.dp, syncColor, RoundedCornerShape(8.dp))
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = "LOKALIZACJA GPS AKTYWNA",
+                    text = syncLabel,
                     color = Color.White,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold
@@ -257,8 +279,14 @@ fun LiveLocationMapView(
 }
 
 @Composable
-fun EventsTab(groupsList: List<GroupItem>) {
+fun EventsTab(
+    groupsList: List<GroupItem>,
+    currentUser: User,
+    locationSyncViewModel: LocationSyncViewModel = hiltViewModel()
+) {
     val context = LocalContext.current
+    val syncState by locationSyncViewModel.syncState.collectAsState()
+    val remoteParticipants by locationSyncViewModel.remoteParticipants.collectAsState()
 
     val eventsList = remember {
         mutableStateListOf(
@@ -424,11 +452,23 @@ fun EventsTab(groupsList: List<GroupItem>) {
     // Live Event details with Map view
     if (selectedLiveEvent != null) {
         val event = selectedLiveEvent!!
-        
-        // State to simulate real-time movement updates
-        val activeParticipants = remember(event.id) { mutableStateListOf<RadarParticipant>().apply { addAll(event.participants) } }
-        
-        LaunchedEffect(event.id) {
+
+        val activeParticipants = remember(event.id) {
+            mutableStateListOf<RadarParticipant>().apply { addAll(event.participants) }
+        }
+
+        LaunchedEffect(event.id, currentUser.email) {
+            locationSyncViewModel.startSharing(event.id, currentUser)
+        }
+
+        DisposableEffect(event.id) {
+            onDispose {
+                locationSyncViewModel.stopSharing()
+            }
+        }
+
+        LaunchedEffect(event.id, syncState) {
+            if (syncState != LocationSyncState.Fallback) return@LaunchedEffect
             while (true) {
                 delay(3000L)
                 for (i in activeParticipants.indices) {
@@ -437,13 +477,32 @@ fun EventsTab(groupsList: List<GroupItem>) {
                     val deltaAngle = (-8..8).random().toDouble()
                     val newDistance = (participant.distanceMeters + deltaDistance).coerceIn(10, 2000)
                     val newAngle = (participant.angleDegrees + deltaAngle + 360.0) % 360.0
-                    activeParticipants[i] = participant.copy(distanceMeters = newDistance, angleDegrees = newAngle)
+                    activeParticipants[i] = participant.copy(
+                        distanceMeters = newDistance,
+                        angleDegrees = newAngle
+                    )
                 }
             }
         }
 
+        val displayParticipants = if (syncState == LocationSyncState.Active) {
+            remoteParticipants.map { remote ->
+                RadarParticipant(
+                    name = remote.displayName,
+                    avatar = remote.avatar,
+                    distanceMeters = remote.distanceMeters,
+                    angleDegrees = 0.0
+                )
+            }
+        } else {
+            activeParticipants.toList()
+        }
+
         androidx.compose.ui.window.Dialog(
-            onDismissRequest = { selectedLiveEvent = null }
+            onDismissRequest = {
+                locationSyncViewModel.stopSharing()
+                selectedLiveEvent = null
+            }
         ) {
             Card(
                 modifier = Modifier
@@ -496,7 +555,12 @@ fun EventsTab(groupsList: List<GroupItem>) {
 
                     // Live GPS Tracking Map
                     LiveLocationMapView(
-                        participants = activeParticipants,
+                        remoteParticipants = remoteParticipants,
+                        fallbackParticipants = activeParticipants.toList(),
+                        syncState = syncState,
+                        onLocationUpdate = { lat, lng ->
+                            locationSyncViewModel.updateMyLocation(lat, lng)
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(250.dp)
@@ -520,7 +584,7 @@ fun EventsTab(groupsList: List<GroupItem>) {
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(activeParticipants) { participant ->
+                        items(displayParticipants) { participant ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -565,7 +629,7 @@ fun EventsTab(groupsList: List<GroupItem>) {
                                             color = Color.White
                                         )
                                         Text(
-                                            text = "Dystans: ${if (participant.distanceMeters >= 1000) String.format("%.1f km", participant.distanceMeters / 1000f) else "${participant.distanceMeters}m"}",
+                                            text = "Dystans: ${formatDistanceMeters(participant.distanceMeters)}",
                                             fontSize = 12.sp,
                                             color = BrandCyan
                                         )
@@ -605,7 +669,10 @@ fun EventsTab(groupsList: List<GroupItem>) {
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Button(
-                        onClick = { selectedLiveEvent = null },
+                        onClick = {
+                            locationSyncViewModel.stopSharing()
+                            selectedLiveEvent = null
+                        },
                         colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()

@@ -1,0 +1,12 @@
+{
+  "rules": {
+    "live_locations": {
+      "$eventId": {
+        "$userKey": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    }
+  }
+}

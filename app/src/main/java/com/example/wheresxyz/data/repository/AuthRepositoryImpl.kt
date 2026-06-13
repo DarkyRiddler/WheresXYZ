@@ -3,6 +3,9 @@ package com.example.wheresxyz.data.repository
 import com.example.wheresxyz.data.local.TokenManager
 import com.example.wheresxyz.data.model.AuthResponse
 import com.example.wheresxyz.data.model.User
+import com.example.wheresxyz.util.validateLoginInput
+import com.example.wheresxyz.util.validateOAuthToken
+import com.example.wheresxyz.util.validateRegisterInput
 import kotlinx.coroutines.delay
 import java.util.UUID
 import javax.inject.Inject
@@ -19,18 +22,8 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun login(email: String, password: String): Result<AuthResponse> {
         delay(1500) // Simulate network delay
-        
-        if (email.isBlank() || password.isBlank()) {
-            return Result.failure(IllegalArgumentException("Email and password cannot be empty"))
-        }
 
-        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            return Result.failure(IllegalArgumentException("Invalid email format"))
-        }
-
-        if (password.length < 6) {
-            return Result.failure(IllegalArgumentException("Password must be at least 6 characters"))
-        }
+        validateLoginInput(email, password).getOrElse { return Result.failure(it) }
 
         // Simulating success
         val mockUser = User(
@@ -60,17 +53,7 @@ class AuthRepositoryImpl @Inject constructor(
     ): Result<AuthResponse> {
         delay(1500) // Simulate network delay
 
-        if (name.isBlank() || lastname.isBlank() || email.isBlank() || password.isBlank()) {
-            return Result.failure(IllegalArgumentException("All fields are required"))
-        }
-
-        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            return Result.failure(IllegalArgumentException("Invalid email format"))
-        }
-
-        if (password.length < 6) {
-            return Result.failure(IllegalArgumentException("Password must be at least 6 characters"))
-        }
+        validateRegisterInput(name, lastname, email, password).getOrElse { return Result.failure(it) }
 
         val mockUser = User(
             id = Random.nextInt(1, 1000),
@@ -94,9 +77,7 @@ class AuthRepositoryImpl @Inject constructor(
     override suspend fun loginWithOAuth(provider: String, token: String): Result<AuthResponse> {
         delay(1000) // Simulate network delay
 
-        if (token.isBlank()) {
-            return Result.failure(IllegalArgumentException("OAuth token is invalid"))
-        }
+        validateOAuthToken(token).getOrElse { return Result.failure(it) }
 
         // Mock OAuth validation and login
         val mockUser = User(

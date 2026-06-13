@@ -130,7 +130,7 @@ fun MainScreen(
             when (selectedTab) {
                 0 -> ProfileTab(user = user, onLogoutClick = onLogoutClick, onSaveProfileClick = onSaveProfileClick)
                 1 -> GroupsTab(groupsList = sharedGroupsList)
-                2 -> EventsTab(groupsList = sharedGroupsList)
+                2 -> EventsTab(groupsList = sharedGroupsList, currentUser = user)
             }
         }
     }
