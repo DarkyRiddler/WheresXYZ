@@ -9,17 +9,17 @@ import javax.inject.Singleton
 @Singleton
 class FirebaseUserRepository @Inject constructor(
     private val database: FirebaseDatabase
-) {
+) : UserRepository {
     private val usersRef = database.getReference("users")
 
-    suspend fun getUserProfile(userId: String): Result<UserDto?> = try {
+    override suspend fun getUserProfile(userId: String): Result<UserDto?> = try {
         val snapshot = usersRef.child(userId).get().await()
         Result.success(snapshot.getValue(UserDto::class.java))
     } catch (e: Exception) {
         Result.failure(e)
     }
 
-    suspend fun updateProfile(userId: String, user: UserDto): Result<Unit> = try {
+    override suspend fun updateProfile(userId: String, user: UserDto): Result<Unit> = try {
         usersRef.child(userId).setValue(user).await()
         Result.success(Unit)
     } catch (e: Exception) {

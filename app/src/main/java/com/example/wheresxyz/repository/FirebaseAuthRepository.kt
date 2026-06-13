@@ -16,22 +16,20 @@ class FirebaseAuthRepository @Inject constructor(
             val result = firebaseAuth.signInWithEmailAndPassword(request.email, request.password).await()
             val firebaseUser = result.user ?: return Result.failure(Exception("Login failed"))
             
-            // Note: In a real app, you'd fetch additional user details from Realtime Database/Firestore
             val userDto = UserDto(
-                id = 0, // Firebase uses UID (String), this schema expects Int
-                userCode = 0,
+                id = firebaseUser.uid,
+                userCode = 0, // This would normally come from the database
                 name = firebaseUser.displayName ?: "User",
                 lastname = "",
                 email = firebaseUser.email ?: "",
                 userPhoto = firebaseUser.photoUrl?.toString()
             )
 
-            // Log attempt
             android.util.Log.d("FirebaseAuth", "Login success for: ${firebaseUser.email}")
 
             Result.success(AuthResponse(
-                accessToken = "firebase_token_${firebaseUser.uid}",
-                refreshToken = "firebase_refresh_${firebaseUser.uid}",
+                accessToken = firebaseUser.uid,
+                refreshToken = "",
                 expiresIn = 3600,
                 user = userDto
             ))
@@ -45,18 +43,22 @@ class FirebaseAuthRepository @Inject constructor(
             val result = firebaseAuth.createUserWithEmailAndPassword(request.email, request.password).await()
             val firebaseUser = result.user ?: return Result.failure(Exception("Registration failed"))
             
+            val userDto = UserDto(
+                id = firebaseUser.uid,
+                userCode = (1000..9999).random(),
+                name = request.name,
+                lastname = request.lastname,
+                email = firebaseUser.email ?: "",
+                userPhoto = null
+            )
+            
+            // In a real app, you would save this userDto to Firebase Realtime Database here
+            
             Result.success(AuthResponse(
-                accessToken = "firebase_token_${firebaseUser.uid}",
-                refreshToken = "firebase_refresh_${firebaseUser.uid}",
+                accessToken = firebaseUser.uid,
+                refreshToken = "",
                 expiresIn = 3600,
-                user = UserDto(
-                    id = 0,
-                    userCode = (1000..9999).random(),
-                    name = request.name,
-                    lastname = request.lastname,
-                    email = firebaseUser.email ?: "",
-                    userPhoto = null
-                )
+                user = userDto
             ))
         } catch (e: Exception) {
             Result.failure(e)
@@ -64,7 +66,6 @@ class FirebaseAuthRepository @Inject constructor(
     }
 
     override suspend fun loginOAuth(request: OAuthRequest): Result<AuthResponse> {
-        // Firebase handles OAuth via different flows, but for now we'll leave it as placeholder
         return Result.failure(Exception("OAuth not implemented for Firebase yet"))
     }
 

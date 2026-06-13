@@ -38,7 +38,7 @@ class MockAuthRepository @Inject constructor() : AuthRepository {
         refreshToken = "mock_refresh_token_uuid",
         expiresIn = 3600,
         user = UserDto(
-            id = 1,
+            id = "1",
             userCode = 1234,
             name = "Test",
             lastname = "User",

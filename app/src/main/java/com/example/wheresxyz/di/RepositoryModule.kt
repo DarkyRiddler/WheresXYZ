@@ -1,9 +1,6 @@
 package com.example.wheresxyz.di
 
-import com.example.wheresxyz.repository.AuthRepository
-import com.example.wheresxyz.repository.FirebaseAuthRepository
-import com.example.wheresxyz.repository.FirebaseGroupRepository
-import com.example.wheresxyz.repository.GroupRepository
+import com.example.wheresxyz.repository.*
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -25,4 +22,16 @@ abstract class RepositoryModule {
     abstract fun bindGroupRepository(
         groupRepository: FirebaseGroupRepository
     ): GroupRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindUserRepository(
+        userRepository: FirebaseUserRepository
+    ): UserRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindPingRepository(
+        pingRepository: FirebasePingRepository
+    ): PingRepository
 }

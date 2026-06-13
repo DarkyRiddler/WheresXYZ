@@ -22,20 +22,22 @@ class FirebaseGroupRepository @Inject constructor(
     }
 
     override suspend fun createGroup(group: GroupDto): Result<Unit> = try {
-        groupsRef.child(group.id.toString()).setValue(group).await()
+        val id = groupsRef.push().key ?: return Result.failure(Exception("Could not get key for new group"))
+        val groupWithId = group.copy(id = id)
+        groupsRef.child(id).setValue(groupWithId).await()
         Result.success(Unit)
     } catch (e: Exception) {
         Result.failure(e)
     }
 
-    override suspend fun getGroupEvent(groupId: Int): Result<EventDto?> = try {
-        val snapshot = database.getReference("events").child(groupId.toString()).get().await()
+    override suspend fun getGroupEvent(groupId: String): Result<EventDto?> = try {
+        val snapshot = database.getReference("events").child(groupId).get().await()
         Result.success(snapshot.getValue(EventDto::class.java))
     } catch (e: Exception) {
         Result.failure(e)
     }
     
-    override suspend fun joinGroup(groupId: Int): Result<Unit> = try {
+    override suspend fun joinGroup(groupId: String): Result<Unit> = try {
         // Implementation for joining group in Firebase
         Result.success(Unit)
     } catch (e: Exception) {
