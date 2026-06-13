@@ -5,25 +5,39 @@ import java.util.Date
 
 // --- Auth Models ---
 
-data class AuthRequest(
+data class RegisterRequest(
+    val name: String,
+    val lastname: String,
     val email: String,
     val password: String
 )
 
+data class LoginRequest(
+    val email: String,
+    val password: String
+)
+
+data class OAuthRequest(
+    val provider: String,
+    val token: String
+)
+
 data class AuthResponse(
-    val token: String,
+    val accessToken: String,
+    val refreshToken: String,
+    val expiresIn: Int,
     val user: UserDto
 )
 
 // --- Entity DTOs ---
 
 data class UserDto(
-    @SerializedName("user_id") val id: Int,
-    @SerializedName("user_code") val code: Int,
+    val id: Int,
+    val userCode: Int,
     val name: String,
     val lastname: String,
     val email: String,
-    @SerializedName("user_photo") val photo: String?
+    val userPhoto: String?
 )
 
 data class GroupDto(

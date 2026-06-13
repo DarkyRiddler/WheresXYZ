@@ -15,21 +15,30 @@ private val Context.dataStore by preferencesDataStore(name = "auth_prefs")
 @Singleton
 class TokenManager @Inject constructor(@ApplicationContext private val context: Context) {
 
-    private val TOKEN_KEY = stringPreferencesKey("jwt_token")
-
-    val token: Flow<String?> = context.dataStore.data.map { preferences ->
-        preferences[TOKEN_KEY]
+    companion object {
+        private val ACCESS_TOKEN_KEY = stringPreferencesKey("access_token")
+        private val REFRESH_TOKEN_KEY = stringPreferencesKey("refresh_token")
     }
 
-    suspend fun saveToken(token: String) {
+    val accessToken: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[ACCESS_TOKEN_KEY]
+    }
+
+    val refreshToken: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[REFRESH_TOKEN_KEY]
+    }
+
+    suspend fun saveTokens(accessToken: String, refreshToken: String) {
         context.dataStore.edit { preferences ->
-            preferences[TOKEN_KEY] = token
+            preferences[ACCESS_TOKEN_KEY] = accessToken
+            preferences[REFRESH_TOKEN_KEY] = refreshToken
         }
     }
 
-    suspend fun deleteToken() {
+    suspend fun clearTokens() {
         context.dataStore.edit { preferences ->
-            preferences.remove(TOKEN_KEY)
+            preferences.remove(ACCESS_TOKEN_KEY)
+            preferences.remove(REFRESH_TOKEN_KEY)
         }
     }
 }
