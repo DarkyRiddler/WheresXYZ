@@ -137,6 +137,9 @@ fun NavGraph(
                     user = currentUser,
                     onLogoutClick = {
                         viewModel.logout()
+                    },
+                    onSaveProfileClick = { name, lastname, photo ->
+                        viewModel.updateProfile(name, lastname, photo)
                     }
                 )
             }

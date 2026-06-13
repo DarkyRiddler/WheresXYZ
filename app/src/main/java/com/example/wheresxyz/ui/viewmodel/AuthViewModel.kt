@@ -120,6 +120,19 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    fun updateProfile(name: String, lastname: String, userPhoto: String?) {
+        viewModelScope.launch {
+            _uiState.value = AuthUiState.Loading
+            authRepository.updateProfile(name, lastname, userPhoto)
+                .onSuccess { updatedUser ->
+                    _uiState.value = AuthUiState.LoggedIn(updatedUser)
+                }
+                .onFailure { error ->
+                    _uiState.value = AuthUiState.Error(error.message ?: "Failed to update profile")
+                }
+        }
+    }
+
     fun clearError() {
         if (_uiState.value is AuthUiState.Error) {
             _uiState.value = AuthUiState.LoggedOut

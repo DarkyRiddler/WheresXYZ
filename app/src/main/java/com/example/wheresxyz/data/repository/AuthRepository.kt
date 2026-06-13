@@ -9,4 +9,5 @@ interface AuthRepository {
     suspend fun loginWithOAuth(provider: String, token: String): Result<AuthResponse>
     suspend fun getCurrentUser(): Result<User>
     suspend fun logout()
+    suspend fun updateProfile(name: String, lastname: String, userPhoto: String?): Result<User>
 }

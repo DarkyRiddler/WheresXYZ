@@ -146,4 +146,19 @@ class AuthRepositoryImpl @Inject constructor(
         tokenManager.clearToken()
         currentUser = null
     }
+
+    override suspend fun updateProfile(name: String, lastname: String, userPhoto: String?): Result<User> {
+        delay(1000)
+        val current = currentUser ?: User(
+            id = 42,
+            userCode = 7777,
+            name = "Witaj",
+            lastname = "Użytkowniku",
+            email = "user@wheresxyz.com",
+            userPhoto = null
+        )
+        val updated = current.copy(name = name, lastname = lastname, userPhoto = userPhoto)
+        currentUser = updated
+        return Result.success(updated)
+    }
 }
