@@ -24,7 +24,7 @@ object NetworkModule {
     @Singleton
     fun provideAuthInterceptor(tokenManager: TokenManager): Interceptor {
         return Interceptor { chain ->
-            val token = runBlocking { tokenManager.accessToken.first() }
+            val token = tokenManager.getToken()
             val request = chain.request().newBuilder()
             if (!token.isNullOrEmpty()) {
                 request.addHeader("Authorization", "Bearer $token")
