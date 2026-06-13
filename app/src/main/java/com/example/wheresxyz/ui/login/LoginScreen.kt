@@ -14,8 +14,8 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit,
     viewModel: LoginViewModel = hiltViewModel()
 ) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("test@example.com") }
+    var password by remember { mutableStateOf("password123") }
     val state by viewModel.loginState.collectAsState()
 
     LaunchedEffect(state) {

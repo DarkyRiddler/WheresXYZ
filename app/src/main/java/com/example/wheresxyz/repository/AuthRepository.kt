@@ -1,67 +1,14 @@
 package com.example.wheresxyz.repository
 
-import com.example.wheresxyz.data.local.TokenManager
-import com.example.wheresxyz.data.remote.ApiService
-import com.example.wheresxyz.data.remote.model.*
-import kotlinx.coroutines.flow.first
-import javax.inject.Inject
-import javax.inject.Singleton
+import com.example.wheresxyz.data.remote.model.AuthResponse
+import com.example.wheresxyz.data.remote.model.LoginRequest
+import com.example.wheresxyz.data.remote.model.OAuthRequest
+import com.example.wheresxyz.data.remote.model.RegisterRequest
 
-@Singleton
-class AuthRepository @Inject constructor(
-    private val apiService: ApiService,
-    private val tokenManager: TokenManager
-) {
-    suspend fun login(request: LoginRequest): Result<AuthResponse> {
-        return try {
-            val response = apiService.login(request)
-            if (response.isSuccessful && response.body() != null) {
-                val authData = response.body()!!
-                tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
-                Result.success(authData)
-            } else {
-                Result.failure(Exception("Login failed: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun register(request: RegisterRequest): Result<AuthResponse> {
-        return try {
-            val response = apiService.register(request)
-            if (response.isSuccessful && response.body() != null) {
-                val authData = response.body()!!
-                tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
-                Result.success(authData)
-            } else {
-                Result.failure(Exception("Registration failed: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun loginOAuth(request: OAuthRequest): Result<AuthResponse> {
-        return try {
-            val response = apiService.loginOAuth(request)
-            if (response.isSuccessful && response.body() != null) {
-                val authData = response.body()!!
-                tokenManager.saveTokens(authData.accessToken, authData.refreshToken)
-                Result.success(authData)
-            } else {
-                Result.failure(Exception("OAuth login failed: ${response.code()}"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun logout() {
-        tokenManager.clearTokens()
-    }
-
-    suspend fun getAccessToken(): String? {
-        return tokenManager.accessToken.first()
-    }
+interface AuthRepository {
+    suspend fun login(request: LoginRequest): Result<AuthResponse>
+    suspend fun register(request: RegisterRequest): Result<AuthResponse>
+    suspend fun loginOAuth(request: OAuthRequest): Result<AuthResponse>
+    suspend fun logout()
+    suspend fun getAccessToken(): String?
 }
