@@ -344,10 +344,18 @@ fun LocationPickerMapView(
         position = CameraPosition.fromLatLngZoom(selectedLatLng, 14f)
     }
 
+    // Centering the camera target on the selectedLatLng only once when it updates (like default to GPS position)
+    var hasCenteredOnGps by remember { mutableStateOf(false) }
     LaunchedEffect(selectedLatLng) {
-        if (cameraPositionState.position.target != selectedLatLng) {
+        if (!hasCenteredOnGps && selectedLatLng != LatLng(52.2297, 21.0122)) {
             cameraPositionState.position = CameraPosition.fromLatLngZoom(selectedLatLng, 14f)
+            hasCenteredOnGps = true
         }
+    }
+
+    val markerState = rememberMarkerState()
+    LaunchedEffect(selectedLatLng) {
+        markerState.position = selectedLatLng
     }
 
     Box(modifier = modifier) {
@@ -359,7 +367,7 @@ fun LocationPickerMapView(
             }
         ) {
             Marker(
-                state = rememberMarkerState(position = selectedLatLng),
+                state = markerState,
                 title = "Punkt startowy"
             )
         }
@@ -387,6 +395,32 @@ fun EventsTab(
 
     var showCreateEventDialog by remember { mutableStateOf(false) }
     var selectedLiveEvent by remember { mutableStateOf<Event?>(null) }
+
+    // GPS location permissions hook for adding event
+    var hasCreateLocationPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val createLocationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        hasCreateLocationPermission = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    }
+
+    LaunchedEffect(showCreateEventDialog) {
+        if (showCreateEventDialog && !hasCreateLocationPermission) {
+            createLocationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -1019,7 +1053,7 @@ fun EventsTab(
         }
     }
 
-    // Add Event Dialog (Swapped AlertDialog to custom Dialog with Column vertical scroll to ensure map picker loads correctly)
+    // Add Event Dialog (Optimized layout structure: Map is fixed at the top, form scrolls below to completely avoid scroll conflicts and guarantee surface loading)
     if (showCreateEventDialog) {
         var eventTitleInput by remember { mutableStateOf("") }
         var eventDescriptionInput by remember { mutableStateOf("") }
@@ -1033,13 +1067,36 @@ fun EventsTab(
             it.isAdmin || (it.members.find { m -> m.isMe }?.canCreateEvents == true) 
         }
 
+        // Fetch user's current GPS location to center the picker coordinates automatically when dialog opens
+        LaunchedEffect(hasCreateLocationPermission) {
+            if (hasCreateLocationPermission) {
+                val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                if (locationManager != null) {
+                    try {
+                        val lastGps = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                        val lastNet = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                        val bestLocation = when {
+                            lastGps != null && lastNet != null -> if (lastGps.time > lastNet.time) lastGps else lastNet
+                            lastGps != null -> lastGps
+                            else -> lastNet
+                        }
+                        bestLocation?.let {
+                            pickedLocation = LatLng(it.latitude, it.longitude)
+                        }
+                    } catch (e: SecurityException) {
+                        // ignore
+                    }
+                }
+            }
+        }
+
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { showCreateEventDialog = false }
         ) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 580.dp)
+                    .heightIn(max = 600.dp)
                     .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(20.dp)),
                 colors = CardDefaults.cardColors(containerColor = DarkSurface),
                 shape = RoundedCornerShape(20.dp)
@@ -1056,8 +1113,24 @@ fun EventsTab(
                         color = Color.White
                     )
                     
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
+                    // 1. Fixed Map Picker at the top of the dialog card - completely avoids scroll container conflict issues
+                    Text("Miejsce startu (kliknij na mapie):", color = Color.White, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LocationPickerMapView(
+                        selectedLatLng = pickedLocation,
+                        onLatLngSelected = { pickedLocation = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(170.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // 2. Scrollable container for input fields below the map picker
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -1147,19 +1220,6 @@ fun EventsTab(
                                     unfocusedTextColor = Color.White
                                 ),
                                 modifier = Modifier.fillMaxWidth()
-                            )
-
-                            // Location Map Picker
-                            Text("Miejsce startu (kliknij na mapie):", color = Color.White, fontSize = 14.sp)
-                            
-                            LocationPickerMapView(
-                                selectedLatLng = pickedLocation,
-                                onLatLngSelected = { pickedLocation = it },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(180.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
                             )
 
                             // Start Date Button
