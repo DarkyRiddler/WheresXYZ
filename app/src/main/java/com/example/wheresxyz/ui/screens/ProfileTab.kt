@@ -50,6 +50,12 @@ fun ProfileTab(
     var editedLastname by remember(user.lastname) { mutableStateOf(user.lastname) }
     var selectedAvatar by remember(user.userPhoto) { mutableStateOf(user.userPhoto ?: "👤") }
 
+    val isNameValid = editedName.isNotBlank()
+    val isLastnameValid = editedLastname.isNotBlank()
+    var isSubmitted by remember { mutableStateOf(false) }
+    val showNameError = isSubmitted && !isNameValid
+    val showLastnameError = isSubmitted && !isLastnameValid
+
     val presetAvatars = listOf("👤", "🧑‍💻", "🧑‍🚀", "🧑‍🎨", "🙋‍♂️", "🙋‍♀️")
 
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -204,8 +210,18 @@ fun ProfileTab(
                     focusedBorderColor = BrandIndigo,
                     unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
                     focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
+                    unfocusedTextColor = Color.White,
+                    errorTextColor = Color.White,
+                    errorBorderColor = ErrorRed,
+                    errorLabelColor = ErrorRed,
+                    errorSupportingTextColor = ErrorRed
                 ),
+                isError = showNameError,
+                supportingText = {
+                    if (showNameError) {
+                        Text("Imię nie może być puste", color = ErrorRed)
+                    }
+                },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -221,8 +237,18 @@ fun ProfileTab(
                     focusedBorderColor = BrandIndigo,
                     unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
                     focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
+                    unfocusedTextColor = Color.White,
+                    errorTextColor = Color.White,
+                    errorBorderColor = ErrorRed,
+                    errorLabelColor = ErrorRed,
+                    errorSupportingTextColor = ErrorRed
                 ),
+                isError = showLastnameError,
+                supportingText = {
+                    if (showLastnameError) {
+                        Text("Nazwisko nie może być puste", color = ErrorRed)
+                    }
+                },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -237,6 +263,7 @@ fun ProfileTab(
                 OutlinedButton(
                     onClick = {
                         isEditing = false
+                        isSubmitted = false
                         // Reset back to original
                         editedName = user.name
                         editedLastname = user.lastname
@@ -251,12 +278,20 @@ fun ProfileTab(
 
                 Button(
                     onClick = {
-                        isEditing = false
-                        onSaveProfileClick(editedName, editedLastname, selectedAvatar)
+                        isSubmitted = true
+                        if (editedName.isBlank()) {
+                            Toast.makeText(context, "Imię nie może być puste", Toast.LENGTH_SHORT).show()
+                        } else if (editedLastname.isBlank()) {
+                            Toast.makeText(context, "Nazwisko nie może być puste", Toast.LENGTH_SHORT).show()
+                        } else {
+                            isEditing = false
+                            isSubmitted = false
+                            onSaveProfileClick(editedName, editedLastname, selectedAvatar)
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
                     shape = RoundedCornerShape(12.dp),
-                    enabled = editedName.isNotBlank() && editedLastname.isNotBlank(),
+                    enabled = true,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Zapisz", color = Color.White)
@@ -281,7 +316,10 @@ fun ProfileTab(
 
             // Edit Profile Button
             Button(
-                onClick = { isEditing = true },
+                onClick = { 
+                    isEditing = true
+                    isSubmitted = false
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.05f)),
                 shape = RoundedCornerShape(10.dp),
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))

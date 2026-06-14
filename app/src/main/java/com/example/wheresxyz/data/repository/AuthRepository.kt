@@ -19,7 +19,7 @@ class AuthRepository @Inject constructor(
     private val tokenManager: TokenManager
 ) {
 
-    private val usersCollection = firestore.collection("users")
+    private val usersCollection = firestore.collection("Users")
 
     suspend fun login(email: String, password: String): Result<AuthResponse> {
         return try {

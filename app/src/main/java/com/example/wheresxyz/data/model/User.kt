@@ -1,12 +1,47 @@
 package com.example.wheresxyz.data.model
 
+import com.google.firebase.firestore.PropertyName
+
 data class User(
-    val id: String = "",
-    val userCode: Int = 0, // 4-digit code
-    val name: String = "",
-    val lastname: String = "",
-    val email: String = "",
-    val userPhoto: String? = null
+    @get:PropertyName("user_id")
+    @set:PropertyName("user_id")
+    @PropertyName("user_id")
+    var id: String = "",
+
+    @get:PropertyName("user_code")
+    @set:PropertyName("user_code")
+    @PropertyName("user_code")
+    var userCode: Int = 0,
+
+    @get:PropertyName("name")
+    @set:PropertyName("name")
+    @PropertyName("name")
+    var name: String = "",
+
+    @get:PropertyName("lastname")
+    @set:PropertyName("lastname")
+    @PropertyName("lastname")
+    var lastname: String = "",
+
+    @get:PropertyName("email")
+    @set:PropertyName("email")
+    @PropertyName("email")
+    var email: String = "",
+
+    @get:PropertyName("user_photo")
+    @set:PropertyName("user_photo")
+    @PropertyName("user_photo")
+    var userPhoto: String? = null,
+
+    @get:PropertyName("groups")
+    @set:PropertyName("groups")
+    @PropertyName("groups")
+    var groups: List<Int> = emptyList(),
+
+    @get:PropertyName("pings")
+    @set:PropertyName("pings")
+    @PropertyName("pings")
+    var pings: List<Map<String, String>> = emptyList()
 )
 
 data class AuthResponse(
