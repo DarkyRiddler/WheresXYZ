@@ -3,12 +3,8 @@ package com.example.wheresxyz.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.net.Uri
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,10 +21,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -37,18 +31,61 @@ import androidx.compose.ui.unit.sp
 import com.example.wheresxyz.data.model.User
 import com.example.wheresxyz.ui.theme.*
 
+// An avatar is either null/empty (→ show initials) or a single emoji string
+private fun isEmoji(value: String?) = !value.isNullOrEmpty() && !value.startsWith("http")
+
+@Composable
+fun AvatarCircle(
+    name: String,
+    lastname: String,
+    emoji: String?,
+    sizeDp: Int = 100,
+    fontSizeSp: Int = 36
+) {
+    Box(
+        modifier = Modifier
+            .size(sizeDp.dp)
+            .background(
+                Brush.radialGradient(colors = listOf(BrandViolet, BrandIndigo)),
+                shape = CircleShape
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isEmoji(emoji)) {
+            Text(
+                text = emoji!!,
+                fontSize = (fontSizeSp * 0.9).sp,
+                textAlign = TextAlign.Center
+            )
+        } else {
+            // Show initials
+            val initials = "${name.take(1)}${lastname.take(1)}".uppercase()
+            Text(
+                text = initials.ifEmpty { "?" },
+                fontSize = fontSizeSp.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
 @Composable
 fun ProfileTab(
-    user: User, 
+    user: User,
     onLogoutClick: () -> Unit,
     onSaveProfileClick: (String, String, String?) -> Unit
 ) {
     val context = LocalContext.current
     var isEditing by remember { mutableStateOf(false) }
-    
+
     var editedName by remember(user.name) { mutableStateOf(user.name) }
     var editedLastname by remember(user.lastname) { mutableStateOf(user.lastname) }
-    var selectedAvatar by remember(user.userPhoto) { mutableStateOf(user.userPhoto ?: "👤") }
+    // null means "use initials", an emoji string means use that emoji
+    var selectedEmoji by remember(user.userPhoto) {
+        mutableStateOf(if (isEmoji(user.userPhoto)) user.userPhoto else null)
+    }
 
     val isNameValid = editedName.isNotBlank()
     val isLastnameValid = editedLastname.isNotBlank()
@@ -56,14 +93,112 @@ fun ProfileTab(
     val showNameError = isSubmitted && !isNameValid
     val showLastnameError = isSubmitted && !isLastnameValid
 
-    val presetAvatars = listOf("👤", "🧑‍💻", "🧑‍🚀", "🧑‍🎨", "🙋‍♂️", "🙋‍♀️")
+    var showCustomEmojiDialog by remember { mutableStateOf(false) }
 
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            selectedAvatar = uri.toString()
+    val defaultEmojis = listOf(
+        "😀", "😎", "🤩", "🧑‍💻", "🧑‍🚀", "🧑‍🎨",
+        "🦊", "🐼", "🐸", "🦁", "🐯", "🐺",
+        "🍕", "🎮", "🎸", "⚽", "🏀", "🎯"
+    )
+
+    // Helper to extract the first grapheme cluster (proper emoji handling for multi-char emojis)
+    val getFirstGrapheme = { text: String ->
+        if (text.isEmpty()) ""
+        else {
+            val boundary = java.text.BreakIterator.getCharacterInstance()
+            boundary.setText(text)
+            val start = boundary.first()
+            val end = boundary.next()
+            if (end != java.text.BreakIterator.DONE) {
+                text.substring(start, end)
+            } else {
+                text
+            }
         }
+    }
+
+    // Build the grid options dynamically
+    val gridItems = remember(selectedEmoji) {
+        val list = mutableListOf<String?>()
+        list.add(null) // Initials
+        list.addAll(defaultEmojis)
+        if (selectedEmoji != null && selectedEmoji !in defaultEmojis) {
+            list.add(selectedEmoji)
+        }
+        list.add("+") // Custom emoji trigger
+        list
+    }
+
+    if (showCustomEmojiDialog) {
+        var tempInput by remember { mutableStateOf("") }
+        val extractedEmoji = getFirstGrapheme(tempInput)
+
+        AlertDialog(
+            onDismissRequest = { showCustomEmojiDialog = false },
+            title = { Text("Wpisz własne emoji", color = Color.White) },
+            text = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "Użyj klawiatury systemowej, aby wpisać lub wkleić dowolne emoji.",
+                        fontSize = 13.sp,
+                        color = TextSecondaryDark,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    AvatarCircle(
+                        name = editedName,
+                        lastname = editedLastname,
+                        emoji = if (extractedEmoji.isNotEmpty()) extractedEmoji else null,
+                        sizeDp = 80,
+                        fontSizeSp = 30
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedTextField(
+                        value = tempInput,
+                        onValueChange = {
+                            tempInput = it
+                        },
+                        placeholder = { Text("Wpisz emoji...", color = TextSecondaryDark) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = BrandIndigo,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (extractedEmoji.isNotEmpty()) {
+                            selectedEmoji = extractedEmoji
+                        }
+                        showCustomEmojiDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo)
+                ) {
+                    Text("Zapisz", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showCustomEmojiDialog = false }
+                ) {
+                    Text("Anuluj", color = Color.White)
+                }
+            },
+            containerColor = DarkSurface,
+            textContentColor = Color.White
+        )
     }
 
     Column(
@@ -73,135 +208,84 @@ fun ProfileTab(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // User Profile Pic or Emoji Avatar
-        val isUri = selectedAvatar.startsWith("content://") || selectedAvatar.startsWith("file://")
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(BrandViolet, BrandIndigo)
-                    ),
-                    shape = CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            if (isUri) {
-                val bitmap = rememberUriImage(selectedAvatar, context)
-                if (bitmap != null) {
-                    Image(
-                        bitmap = bitmap,
-                        contentDescription = "Awatar",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape)
-                    )
-                } else {
-                    Text(
-                        text = editedName.take(1) + editedLastname.take(1),
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-            } else {
-                Text(
-                    text = selectedAvatar,
-                    fontSize = if (selectedAvatar.length <= 2) 48.sp else 32.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
+        // Avatar display
+        AvatarCircle(
+            name = editedName,
+            lastname = editedLastname,
+            emoji = selectedEmoji,
+            sizeDp = 100,
+            fontSizeSp = 36
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         if (isEditing) {
-            // Avatar Selector Grid
+            // Emoji picker grid
             Text(
                 text = "Wybierz awatar:",
                 fontSize = 12.sp,
                 color = TextSecondaryDark,
                 modifier = Modifier.align(Alignment.Start)
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                presetAvatars.forEach { avatar ->
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(
-                                if (selectedAvatar == avatar) BrandIndigo.copy(alpha = 0.2f) else Color.Transparent,
-                                CircleShape
-                            )
-                            .border(
-                                1.dp,
-                                if (selectedAvatar == avatar) BrandIndigo else Color.White.copy(alpha = 0.1f),
-                                CircleShape
-                            )
-                            .clickable { selectedAvatar = avatar },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = avatar, fontSize = 20.sp)
-                    }
-                }
+            Spacer(modifier = Modifier.height(10.dp))
 
-                // Gallery Option indicator
-                val isCustomSelected = selectedAvatar.startsWith("content://") || selectedAvatar.startsWith("file://")
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(
-                            if (isCustomSelected) BrandIndigo.copy(alpha = 0.2f) else Color.Transparent,
-                            CircleShape
-                        )
-                        .border(
-                            1.dp,
-                            if (isCustomSelected) BrandIndigo else Color.White.copy(alpha = 0.1f),
-                            CircleShape
-                        )
-                        .clickable {
-                            galleryLauncher.launch("image/*")
-                        },
-                    contentAlignment = Alignment.Center
+            // Split into rows of 6
+            gridItems.chunked(6).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (isCustomSelected) {
-                        val bitmap = rememberUriImage(selectedAvatar, context)
-                        if (bitmap != null) {
-                            Image(
-                                bitmap = bitmap,
-                                contentDescription = "Wybrany awatar",
-                                contentScale = ContentScale.Crop,
+                    row.forEach { item ->
+                        if (item == "+") {
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape)
-                            )
+                                    .size(44.dp)
+                                    .background(Color.White.copy(alpha = 0.05f), CircleShape)
+                                    .border(1.5.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+                                    .clickable { showCustomEmojiDialog = true },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(text = "➕", fontSize = 18.sp)
+                            }
                         } else {
-                            Text(text = "🖼️", fontSize = 20.sp)
+                            val isSelected = selectedEmoji == item
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .background(
+                                        if (isSelected) BrandIndigo.copy(alpha = 0.25f) else Color.Transparent,
+                                        CircleShape
+                                    )
+                                    .border(
+                                        1.5.dp,
+                                        if (isSelected) BrandIndigo else Color.White.copy(alpha = 0.12f),
+                                        CircleShape
+                                    )
+                                    .clickable { selectedEmoji = item },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (item == null) {
+                                    // Initials preview
+                                    val initials = "${editedName.take(1)}${editedLastname.take(1)}".uppercase()
+                                    Text(
+                                        text = initials.ifEmpty { "?" },
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                } else {
+                                    Text(text = item, fontSize = 22.sp)
+                                }
+                            }
                         }
-                    } else {
-                        Text(text = "🖼️", fontSize = 20.sp)
                     }
                 }
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            TextButton(
-                onClick = { galleryLauncher.launch("image/*") },
-                colors = ButtonDefaults.textButtonColors(contentColor = BrandCyan),
-                modifier = Modifier.align(Alignment.Start)
-            ) {
-                Text("Wybierz z galerii", fontSize = 14.sp)
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // First Name Field
+            // Name field
             OutlinedTextField(
                 value = editedName,
                 onValueChange = { editedName = it },
@@ -218,9 +302,7 @@ fun ProfileTab(
                 ),
                 isError = showNameError,
                 supportingText = {
-                    if (showNameError) {
-                        Text("Imię nie może być puste", color = ErrorRed)
-                    }
+                    if (showNameError) Text("Imię nie może być puste", color = ErrorRed)
                 },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
@@ -228,7 +310,7 @@ fun ProfileTab(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Last Name Field
+            // Lastname field
             OutlinedTextField(
                 value = editedLastname,
                 onValueChange = { editedLastname = it },
@@ -245,9 +327,7 @@ fun ProfileTab(
                 ),
                 isError = showLastnameError,
                 supportingText = {
-                    if (showLastnameError) {
-                        Text("Nazwisko nie może być puste", color = ErrorRed)
-                    }
+                    if (showLastnameError) Text("Nazwisko nie może być puste", color = ErrorRed)
                 },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
@@ -255,7 +335,7 @@ fun ProfileTab(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Action Buttons (Save/Cancel)
+            // Save / Cancel
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -264,10 +344,9 @@ fun ProfileTab(
                     onClick = {
                         isEditing = false
                         isSubmitted = false
-                        // Reset back to original
                         editedName = user.name
                         editedLastname = user.lastname
-                        selectedAvatar = user.userPhoto ?: "👤"
+                        selectedEmoji = if (isEmoji(user.userPhoto)) user.userPhoto else null
                     },
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
                     shape = RoundedCornerShape(12.dp),
@@ -286,40 +365,32 @@ fun ProfileTab(
                         } else {
                             isEditing = false
                             isSubmitted = false
-                            onSaveProfileClick(editedName, editedLastname, selectedAvatar)
+                            onSaveProfileClick(editedName, editedLastname, selectedEmoji)
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
                     shape = RoundedCornerShape(12.dp),
-                    enabled = true,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Zapisz", color = Color.White)
                 }
             }
         } else {
-            // View Mode
+            // View mode
             Text(
                 text = "${user.name} ${user.lastname}",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
-
             Text(
                 text = user.email,
                 fontSize = 14.sp,
                 color = TextSecondaryDark
             )
-
             Spacer(modifier = Modifier.height(16.dp))
-
-            // Edit Profile Button
             Button(
-                onClick = { 
-                    isEditing = true
-                    isSubmitted = false
-                },
+                onClick = { isEditing = true; isSubmitted = false },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.05f)),
                 shape = RoundedCornerShape(10.dp),
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
@@ -330,7 +401,7 @@ fun ProfileTab(
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // User 4-Digit Code Box
+        // Member code card
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -346,11 +417,7 @@ fun ProfileTab(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text(
-                        text = "Mój Kod Członka",
-                        fontSize = 12.sp,
-                        color = TextSecondaryDark
-                    )
+                    Text("Mój Kod Członka", fontSize = 12.sp, color = TextSecondaryDark)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = String.format("%04d", user.userCode),
@@ -359,11 +426,7 @@ fun ProfileTab(
                         color = BrandCyan
                     )
                 }
-                
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Share Button
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     IconButton(
                         onClick = {
                             val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
@@ -372,17 +435,10 @@ fun ProfileTab(
                             }
                             context.startActivity(android.content.Intent.createChooser(intent, "Udostępnij kod członka"))
                         },
-                        modifier = Modifier
-                            .background(Color.White.copy(alpha = 0.05f), CircleShape)
+                        modifier = Modifier.background(Color.White.copy(alpha = 0.05f), CircleShape)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Udostępnij kod",
-                            tint = BrandCyan
-                        )
+                        Icon(Icons.Default.Share, contentDescription = "Udostępnij kod", tint = BrandCyan)
                     }
-
-                    // Copy Button
                     IconButton(
                         onClick = {
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -390,14 +446,9 @@ fun ProfileTab(
                             clipboard.setPrimaryClip(clip)
                             Toast.makeText(context, "Kod skopiowany do schowka!", Toast.LENGTH_SHORT).show()
                         },
-                        modifier = Modifier
-                            .background(Color.White.copy(alpha = 0.05f), CircleShape)
+                        modifier = Modifier.background(Color.White.copy(alpha = 0.05f), CircleShape)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Kopiuj kod",
-                            tint = BrandIndigo
-                        )
+                        Icon(Icons.Default.ContentCopy, contentDescription = "Kopiuj kod", tint = BrandIndigo)
                     }
                 }
             }
@@ -405,7 +456,7 @@ fun ProfileTab(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Logout Button
+        // Logout
         Button(
             onClick = onLogoutClick,
             colors = ButtonDefaults.buttonColors(containerColor = ErrorRed.copy(alpha = 0.15f)),
@@ -419,18 +470,9 @@ fun ProfileTab(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(vertical = 4.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.ExitToApp,
-                    contentDescription = "Wyloguj się",
-                    tint = ErrorRed
-                )
+                Icon(Icons.Default.ExitToApp, contentDescription = "Wyloguj się", tint = ErrorRed)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Wyloguj się",
-                    color = ErrorRed,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
+                Text("Wyloguj się", color = ErrorRed, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
     }

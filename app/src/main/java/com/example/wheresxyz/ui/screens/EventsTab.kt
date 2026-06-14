@@ -606,20 +606,18 @@ fun EventsTab(
                                             ),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        if (participant.avatar.startsWith("content://") || participant.avatar.startsWith("file://")) {
-                                            val bitmap = rememberUriImage(participant.avatar, context)
-                                            if (bitmap != null) {
-                                                Image(
-                                                    bitmap = bitmap,
-                                                    contentDescription = participant.name,
-                                                    contentScale = ContentScale.Crop,
-                                                    modifier = Modifier.fillMaxSize().clip(CircleShape)
-                                                )
-                                            } else {
-                                                Text(participant.name.take(1), color = Color.White, fontWeight = FontWeight.Bold)
-                                            }
+                                        val participantEmoji = participant.avatar.takeIf {
+                                            it.isNotEmpty() && it != "👤" && !it.startsWith("http") && !it.startsWith("content")
+                                        }
+                                        if (participantEmoji != null) {
+                                            Text(participantEmoji, fontSize = 14.sp)
                                         } else {
-                                            Text(participant.avatar, fontSize = 14.sp)
+                                            Text(
+                                                text = participant.name.take(1).uppercase().ifEmpty { "?" },
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
                                         }
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))

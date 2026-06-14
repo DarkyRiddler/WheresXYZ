@@ -45,7 +45,7 @@ class AuthRepository @Inject constructor(
                     name = email.substringBefore("@").replaceFirstChar { it.uppercase() },
                     lastname = "User",
                     email = email,
-                    userPhoto = firebaseUser.photoUrl?.toString()
+                    userPhoto = null
                 )
                 withTimeout(8.seconds) {
                     usersCollection.document(firebaseUser.uid).set(user).await()
@@ -129,7 +129,7 @@ class AuthRepository @Inject constructor(
                     name = nameParts.getOrElse(0) { "Google" },
                     lastname = nameParts.getOrElse(1) { "User" },
                     email = firebaseUser.email ?: "",
-                    userPhoto = firebaseUser.photoUrl?.toString()
+                    userPhoto = null
                 )
                 withTimeout(8.seconds) {
                     usersCollection.document(firebaseUser.uid).set(user).await()

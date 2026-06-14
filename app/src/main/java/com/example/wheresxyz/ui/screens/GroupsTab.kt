@@ -45,44 +45,28 @@ fun MemberAvatarsPreview(members: List<GroupMember>, maxVisible: Int = 4) {
     ) {
         val visibleMembers = members.take(maxVisible)
         visibleMembers.forEach { member ->
-            val isUri = member.avatar.startsWith("content://") || member.avatar.startsWith("file://")
+            val emoji = member.avatar.takeIf {
+                it.isNotEmpty() && it != "👤" && !it.startsWith("http") && !it.startsWith("content")
+            }
             Box(
                 modifier = Modifier
                     .size(28.dp)
                     .border(1.5.dp, DarkSurface, CircleShape)
                     .background(
-                        Brush.radialGradient(
-                            colors = listOf(BrandViolet, BrandIndigo)
-                        ),
+                        Brush.radialGradient(colors = listOf(BrandViolet, BrandIndigo)),
                         CircleShape
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                if (isUri) {
-                    val context = LocalContext.current
-                    val bitmap = rememberUriImage(member.avatar, context)
-                    if (bitmap != null) {
-                        Image(
-                            bitmap = bitmap,
-                            contentDescription = member.name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape)
-                        )
-                    } else {
-                        Text(
-                            text = member.name.take(1),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
+                if (emoji != null) {
+                    Text(text = emoji, fontSize = 12.sp, textAlign = TextAlign.Center)
                 } else {
+                    val initials = "${member.name.take(1)}${member.lastname.take(1)}".uppercase()
                     Text(
-                        text = member.avatar,
-                        fontSize = 12.sp,
-                        textAlign = TextAlign.Center
+                        text = initials.ifEmpty { "?" },
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
                 }
             }
@@ -560,20 +544,19 @@ fun GroupsTab(
                                                 ),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            if (member.avatar.startsWith("content://") || member.avatar.startsWith("file://")) {
-                                                val bitmap = rememberUriImage(member.avatar, context)
-                                                if (bitmap != null) {
-                                                    Image(
-                                                        bitmap = bitmap,
-                                                        contentDescription = member.name,
-                                                        contentScale = ContentScale.Crop,
-                                                        modifier = Modifier.fillMaxSize().clip(CircleShape)
-                                                    )
-                                                } else {
-                                                    Text(member.name.take(1), color = Color.White, fontWeight = FontWeight.Bold)
-                                                }
+                                            val memberEmoji = member.avatar.takeIf {
+                                                it.isNotEmpty() && it != "👤" && !it.startsWith("http") && !it.startsWith("content")
+                                            }
+                                            if (memberEmoji != null) {
+                                                Text(memberEmoji, fontSize = 16.sp)
                                             } else {
-                                                Text(member.avatar, fontSize = 16.sp)
+                                                val initials = "${member.name.take(1)}${member.lastname.take(1)}".uppercase()
+                                                Text(
+                                                    text = initials.ifEmpty { "?" },
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color.White
+                                                )
                                             }
                                         }
                                         Spacer(modifier = Modifier.width(10.dp))
