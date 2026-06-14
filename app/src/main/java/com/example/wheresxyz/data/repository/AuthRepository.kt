@@ -4,6 +4,7 @@ import com.example.wheresxyz.data.local.TokenManager
 import com.example.wheresxyz.data.model.AuthResponse
 import com.example.wheresxyz.data.model.User
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
@@ -107,31 +108,42 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    suspend fun loginWithOAuth(provider: String, token: String): Result<AuthResponse> {
+    suspend fun loginWithGoogle(idToken: String): Result<AuthResponse> {
         return try {
-            val userEmail = "oauth.${provider.lowercase()}@example.com"
-            val mockUid = "oauth_user_${provider.lowercase()}"
-            val existingDocument = withTimeout(8.seconds) {
-                usersCollection.document(mockUid).get().await()
+            val credential = GoogleAuthProvider.getCredential(idToken, null)
+            val result = firebaseAuth.signInWithCredential(credential).await()
+            val firebaseUser = result.user ?: return Result.failure(Exception("Google sign-in failed: empty user"))
+
+            // Try to fetch existing Firestore profile
+            val document = withTimeout(8.seconds) {
+                usersCollection.document(firebaseUser.uid).get().await()
             }
-            var user = existingDocument.toObject(User::class.java)
+            var user = document.toObject(User::class.java)
 
             if (user == null) {
+                // First-time Google login — create a profile
+                val nameParts = (firebaseUser.displayName ?: "Google User").split(" ", limit = 2)
                 user = User(
-                    id = mockUid,
+                    id = firebaseUser.uid,
                     userCode = generateUniqueUserCode(),
-                    name = "OAuth",
-                    lastname = provider.replaceFirstChar { it.uppercase() },
-                    email = userEmail,
-                    userPhoto = null
+                    name = nameParts.getOrElse(0) { "Google" },
+                    lastname = nameParts.getOrElse(1) { "User" },
+                    email = firebaseUser.email ?: "",
+                    userPhoto = firebaseUser.photoUrl?.toString()
                 )
                 withTimeout(8.seconds) {
-                    usersCollection.document(mockUid).set(user).await()
+                    usersCollection.document(firebaseUser.uid).set(user).await()
                 }
             }
 
-            tokenManager.saveToken(token, "firebase_refresh_$mockUid", 3600L)
-            Result.success(AuthResponse(token, "firebase_refresh_$mockUid", 3600L, user))
+            val idTokenStr = firebaseUser.getIdToken(false).await().token ?: ""
+            tokenManager.saveToken(
+                token = idTokenStr,
+                refreshToken = "firebase_refresh_${firebaseUser.uid}",
+                expiresIn = 3600L
+            )
+
+            Result.success(AuthResponse(idTokenStr, "firebase_refresh_${firebaseUser.uid}", 3600L, user))
         } catch (e: Exception) {
             Result.failure(e)
         }

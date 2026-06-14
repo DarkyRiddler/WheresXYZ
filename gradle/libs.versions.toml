@@ -22,12 +22,15 @@ firebaseBom = "33.7.0"
 googleServices = "4.4.2"
 playServicesMaps = "18.2.0"
 mapsCompose = "4.3.0"
+playServicesAuth = "21.3.0"
 firebaseAuth = "22.3.1"
 firebaseDatabase = "20.3.1"
 firebaseFirestore = "24.11.0"
+coil = "2.7.0"
 
 [libraries]
 google-play-services-maps = { group = "com.google.android.gms", name = "play-services-maps", version.ref = "playServicesMaps" }
+google-play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
 google-maps-compose = { group = "com.google.maps.android", name = "maps-compose", version.ref = "mapsCompose" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
@@ -62,6 +65,8 @@ firebase-auth = { group = "com.google.firebase", name = "firebase-auth-ktx", ver
 firebase-database = { group = "com.google.firebase", name = "firebase-database-ktx", version.ref = "firebaseDatabase" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore-ktx", version.ref = "firebaseFirestore" }
 google-firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore", version.ref = "firebaseFirestore" }
+firebase-storage = { group = "com.google.firebase", name = "firebase-storage-ktx" }
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

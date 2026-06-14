@@ -34,7 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 @Composable
 fun LoginScreen(
     onLoginClick: (String, String) -> Unit,
-    onOAuthClick: (String) -> Unit,
+    onGoogleSignInClick: () -> Unit,
     onNavigateToRegister: () -> Unit,
     errorMessage: String?,
     onClearError: () -> Unit,
@@ -322,31 +322,15 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Social Buttons Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Google OAuth Button
-                OAuthButton(
-                    providerName = "Google",
-                    backgroundColor = Color(0xFFEA4335).copy(alpha = 0.15f),
-                    textColor = Color(0xFFFEEA35),
-                    borderColor = Color(0xFFEA4335).copy(alpha = 0.4f),
-                    onClick = { onOAuthClick("Google") },
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Github OAuth Button
-                OAuthButton(
-                    providerName = "GitHub",
-                    backgroundColor = Color(0xFF24292E).copy(alpha = 0.4f),
-                    textColor = Color.White,
-                    borderColor = Color.White.copy(alpha = 0.2f),
-                    onClick = { onOAuthClick("GitHub") },
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            // Google Sign-In Button (full width)
+            OAuthButton(
+                providerName = "Google",
+                backgroundColor = Color(0xFFEA4335).copy(alpha = 0.12f),
+                textColor = Color.White,
+                borderColor = Color(0xFFEA4335).copy(alpha = 0.5f),
+                onClick = onGoogleSignInClick,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             Spacer(modifier = Modifier.height(36.dp))
 

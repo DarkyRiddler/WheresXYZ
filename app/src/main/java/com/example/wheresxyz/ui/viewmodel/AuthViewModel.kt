@@ -129,15 +129,15 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun loginWithOAuth(provider: String, oAuthToken: String) {
+    fun loginWithGoogle(idToken: String) {
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
-            authRepository.loginWithOAuth(provider, oAuthToken)
+            authRepository.loginWithGoogle(idToken)
                 .onSuccess { authResponse ->
                     _uiState.value = AuthUiState.LoggedIn(authResponse.user)
                 }
                 .onFailure { error ->
-                    _uiState.value = AuthUiState.Error(getLocalizedErrorMessage(error.message ?: "OAuth login failed"))
+                    _uiState.value = AuthUiState.Error(getLocalizedErrorMessage(error.message ?: "Google login failed"))
                 }
         }
     }

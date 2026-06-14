@@ -85,10 +85,17 @@ dependencies {
     implementation(libs.firebase.auth)
     implementation(libs.firebase.database)
     implementation(libs.firebase.firestore)
+    implementation(libs.firebase.storage)
+
+    // Coil (image loading – handles content://, file://, https://)
+    implementation(libs.coil.compose)
 
     // Google Maps
     implementation(libs.google.play.services.maps)
     implementation(libs.google.maps.compose)
+
+    // Google Sign-In
+    implementation(libs.google.play.services.auth)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
