@@ -2,8 +2,8 @@
   "rules": {
     "live_locations": {
       "$eventId": {
+        ".read": "auth != null",
         "$userKey": {
-          ".read": "auth != null",
           ".write": "auth != null"
         }
       }
