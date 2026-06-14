@@ -63,7 +63,7 @@ class GroupsRepository @Inject constructor(
 
     suspend fun createGroup(groupName: String, currentUser: User): Result<GroupItem> {
         return try {
-            val randomCode = (1000..9999).random().toString()
+            val randomCode = generateUniqueGroupCode()
             val newMember = mapOf(
                 "name" to currentUser.name,
                 "lastname" to currentUser.lastname,
@@ -229,6 +229,15 @@ class GroupsRepository @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+    private suspend fun generateUniqueGroupCode(): String {
+        while (true) {
+            val candidate = (1000..9999).random().toString()
+            val existing = withTimeout(8.seconds) {
+                groupsCollection.whereEqualTo("code", candidate).get().await()
+            }
+            if (existing.isEmpty) return candidate
         }
     }
 }

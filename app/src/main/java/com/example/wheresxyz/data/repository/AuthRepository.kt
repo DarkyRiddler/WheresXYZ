@@ -40,7 +40,7 @@ class AuthRepository @Inject constructor(
                 // Fallback: If profile doesn't exist in DB, create a default one
                 user = User(
                     id = firebaseUser.uid,
-                    userCode = Random.nextInt(1000, 9999),
+                    userCode = generateUniqueUserCode(),
                     name = email.substringBefore("@").replaceFirstChar { it.uppercase() },
                     lastname = "User",
                     email = email,
@@ -81,7 +81,7 @@ class AuthRepository @Inject constructor(
 
             val newUser = User(
                 id = firebaseUser.uid,
-                userCode = Random.nextInt(1000, 9999),
+                userCode = generateUniqueUserCode(),
                 name = name,
                 lastname = lastname,
                 email = email,
@@ -119,7 +119,7 @@ class AuthRepository @Inject constructor(
             if (user == null) {
                 user = User(
                     id = mockUid,
-                    userCode = Random.nextInt(1000, 9999),
+                    userCode = generateUniqueUserCode(),
                     name = "OAuth",
                     lastname = provider.replaceFirstChar { it.uppercase() },
                     email = userEmail,
@@ -150,7 +150,7 @@ class AuthRepository @Inject constructor(
                 } else {
                     val restoredUser = User(
                         id = firebaseUser.uid,
-                        userCode = Random.nextInt(1000, 9999),
+                        userCode = generateUniqueUserCode(),
                         name = firebaseUser.displayName ?: "User",
                         lastname = "",
                         email = firebaseUser.email ?: "",
@@ -186,7 +186,7 @@ class AuthRepository @Inject constructor(
             }
             val current = document.toObject(User::class.java) ?: User(
                 id = firebaseUser.uid,
-                userCode = Random.nextInt(1000, 9999),
+                userCode = generateUniqueUserCode(),
                 name = name,
                 lastname = lastname,
                 email = firebaseUser.email ?: "",
@@ -232,6 +232,15 @@ class AuthRepository @Inject constructor(
             Result.success(updated)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+    private suspend fun generateUniqueUserCode(): Int {
+        while (true) {
+            val candidate = Random.nextInt(1000, 10000)
+            val existing = withTimeout(8.seconds) {
+                usersCollection.whereEqualTo("user_code", candidate).get().await()
+            }
+            if (existing.isEmpty) return candidate
         }
     }
 }
