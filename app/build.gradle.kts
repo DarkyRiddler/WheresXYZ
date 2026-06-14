@@ -45,6 +45,8 @@ android {
 }
 
 dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:34.0.0"))
+    implementation("com.google.firebase:firebase-auth")
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.fragment.ktx)
@@ -69,6 +71,7 @@ dependencies {
 
     // Hilt
     implementation(libs.hilt.android)
+    implementation(libs.google.firebase.firestore)
     ksp(libs.hilt.compiler)
 
     // Coroutines
@@ -81,6 +84,7 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.database)
+    implementation(libs.firebase.firestore)
 
     // Google Maps
     implementation(libs.google.play.services.maps)
