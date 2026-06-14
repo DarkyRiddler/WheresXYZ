@@ -3,46 +3,65 @@ package com.example.wheresxyz.data.repository
 import com.example.wheresxyz.data.local.TokenManager
 import com.example.wheresxyz.data.model.AuthResponse
 import com.example.wheresxyz.data.model.User
-import com.example.wheresxyz.util.validateLoginInput
-import com.example.wheresxyz.util.validateOAuthToken
-import com.example.wheresxyz.util.validateRegisterInput
-import kotlinx.coroutines.delay
-import java.util.UUID
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
 
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
+    private val firebaseAuth: FirebaseAuth,
+    private val firestore: FirebaseFirestore,
     private val tokenManager: TokenManager
 ) : AuthRepository {
 
-    // Simple in-memory user cache for demonstration/mock purposes
-    private var currentUser: User? = null
+    private val usersCollection = firestore.collection("users")
 
     override suspend fun login(email: String, password: String): Result<AuthResponse> {
-        delay(1500) // Simulate network delay
+        return try {
+            if (email.isBlank() || password.isBlank()) {
+                return Result.failure(IllegalArgumentException("Email and password cannot be empty"))
+            }
 
-        validateLoginInput(email, password).getOrElse { return Result.failure(it) }
+            val result = firebaseAuth.signInWithEmailAndPassword(email, password).await()
+            val firebaseUser = result.user ?: return Result.failure(Exception("Login failed: empty user"))
 
-        // Simulating success
-        val mockUser = User(
-            id = Random.nextInt(1, 1000),
-            userCode = Random.nextInt(1000, 9999),
-            name = email.substringBefore("@").replaceFirstChar { it.uppercase() },
-            lastname = "User",
-            email = email,
-            userPhoto = null
-        )
+            // Fetch user profile from Firestore with timeout
+            val document = withTimeout(8000) {
+                usersCollection.document(firebaseUser.uid).get().await()
+            }
+            var user = document.toObject(User::class.java)
 
-        val accessToken = UUID.randomUUID().toString()
-        val refreshToken = UUID.randomUUID().toString()
-        val expiresIn = 3600L // 1 hour
+            if (user == null) {
+                // Fallback: If profile doesn't exist in DB, create a default one
+                user = User(
+                    id = firebaseUser.uid,
+                    userCode = Random.nextInt(1000, 9999),
+                    name = email.substringBefore("@").replaceFirstChar { it.uppercase() },
+                    lastname = "User",
+                    email = email,
+                    userPhoto = firebaseUser.photoUrl?.toString()
+                )
+                withTimeout(8000) {
+                    usersCollection.document(firebaseUser.uid).set(user).await()
+                }
+            }
 
-        tokenManager.saveToken(accessToken, refreshToken, expiresIn)
-        currentUser = mockUser
+            // Save tokens/session in local token manager
+            val idToken = firebaseUser.getIdToken(false).await().token ?: ""
+            tokenManager.saveToken(
+                token = idToken,
+                refreshToken = "firebase_refresh_${firebaseUser.uid}",
+                expiresIn = 3600L
+            )
 
-        return Result.success(AuthResponse(accessToken, refreshToken, expiresIn, mockUser))
+            Result.success(AuthResponse(idToken, "firebase_refresh_${firebaseUser.uid}", 3600L, user))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun register(
@@ -51,95 +70,134 @@ class AuthRepositoryImpl @Inject constructor(
         email: String,
         password: String
     ): Result<AuthResponse> {
-        delay(1500) // Simulate network delay
+        return try {
+            if (name.isBlank() || lastname.isBlank() || email.isBlank() || password.isBlank()) {
+                return Result.failure(IllegalArgumentException("All fields are required"))
+            }
 
-        validateRegisterInput(name, lastname, email, password).getOrElse { return Result.failure(it) }
+            val result = firebaseAuth.createUserWithEmailAndPassword(email, password).await()
+            val firebaseUser = result.user ?: return Result.failure(Exception("Registration failed: empty user"))
 
-        val mockUser = User(
-            id = Random.nextInt(1, 1000),
-            userCode = Random.nextInt(1000, 9999),
-            name = name,
-            lastname = lastname,
-            email = email,
-            userPhoto = null
-        )
+            val newUser = User(
+                id = firebaseUser.uid,
+                userCode = Random.nextInt(1000, 9999),
+                name = name,
+                lastname = lastname,
+                email = email,
+                userPhoto = null
+            )
 
-        val accessToken = UUID.randomUUID().toString()
-        val refreshToken = UUID.randomUUID().toString()
-        val expiresIn = 3600L
+            // Save user profile in database with timeout
+            withTimeout(8000) {
+                usersCollection.document(firebaseUser.uid).set(newUser).await()
+            }
 
-        tokenManager.saveToken(accessToken, refreshToken, expiresIn)
-        currentUser = mockUser
+            // Save token
+            val idToken = firebaseUser.getIdToken(false).await().token ?: ""
+            tokenManager.saveToken(
+                token = idToken,
+                refreshToken = "firebase_refresh_${firebaseUser.uid}",
+                expiresIn = 3600L
+            )
 
-        return Result.success(AuthResponse(accessToken, refreshToken, expiresIn, mockUser))
+            Result.success(AuthResponse(idToken, "firebase_refresh_${firebaseUser.uid}", 3600L, newUser))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun loginWithOAuth(provider: String, token: String): Result<AuthResponse> {
-        delay(1000) // Simulate network delay
+        return try {
+            val userEmail = "oauth.${provider.lowercase()}@example.com"
+            val mockUid = "oauth_user_${provider.lowercase()}"
+            val existingDocument = withTimeout(8000) {
+                usersCollection.document(mockUid).get().await()
+            }
+            var user = existingDocument.toObject(User::class.java)
 
-        validateOAuthToken(token).getOrElse { return Result.failure(it) }
+            if (user == null) {
+                user = User(
+                    id = mockUid,
+                    userCode = Random.nextInt(1000, 9999),
+                    name = "OAuth",
+                    lastname = provider.replaceFirstChar { it.uppercase() },
+                    email = userEmail,
+                    userPhoto = null
+                )
+                withTimeout(8000) {
+                    usersCollection.document(mockUid).set(user).await()
+                }
+            }
 
-        // Mock OAuth validation and login
-        val mockUser = User(
-            id = Random.nextInt(1, 1000),
-            userCode = Random.nextInt(1000, 9999),
-            name = "OAuth",
-            lastname = provider.replaceFirstChar { it.uppercase() },
-            email = "oauth.${provider.lowercase()}@example.com",
-            userPhoto = null
-        )
-
-        val accessToken = token
-        val refreshToken = UUID.randomUUID().toString()
-        val expiresIn = 3600L
-
-        tokenManager.saveToken(accessToken, refreshToken, expiresIn)
-        currentUser = mockUser
-
-        return Result.success(AuthResponse(accessToken, refreshToken, expiresIn, mockUser))
+            tokenManager.saveToken(token, "firebase_refresh_$mockUid", 3600L)
+            Result.success(AuthResponse(token, "firebase_refresh_$mockUid", 3600L, user))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun getCurrentUser(): Result<User> {
-        delay(500)
-        currentUser?.let {
-            return Result.success(it)
+        return try {
+            val firebaseUser = firebaseAuth.currentUser
+            if (firebaseUser != null) {
+                val document = withTimeout(8000) {
+                    usersCollection.document(firebaseUser.uid).get().await()
+                }
+                val user = document.toObject(User::class.java)
+                if (user != null) {
+                    Result.success(user)
+                } else {
+                    val restoredUser = User(
+                        id = firebaseUser.uid,
+                        userCode = Random.nextInt(1000, 9999),
+                        name = firebaseUser.displayName ?: "User",
+                        lastname = "",
+                        email = firebaseUser.email ?: "",
+                        userPhoto = firebaseUser.photoUrl?.toString()
+                    )
+                    withTimeout(8000) {
+                        usersCollection.document(firebaseUser.uid).set(restoredUser).await()
+                    }
+                    Result.success(restoredUser)
+                }
+            } else {
+                Result.failure(IllegalStateException("No firebase user is currently logged in"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
-
-        // If user is logged in via token but cache is empty, we restore a mock user
-        if (tokenManager.isTokenValid()) {
-            val restoredUser = User(
-                id = 42,
-                userCode = 7777,
-                name = "Logged In",
-                lastname = "User",
-                email = "user@wheresxyz.com",
-                userPhoto = null
-            )
-            currentUser = restoredUser
-            return Result.success(restoredUser)
-        }
-
-        return Result.failure(IllegalStateException("No user is currently logged in"))
     }
 
     override suspend fun logout() {
-        delay(300)
+        try {
+            firebaseAuth.signOut()
+        } catch (e: Exception) {
+            // ignored
+        }
         tokenManager.clearToken()
-        currentUser = null
     }
 
     override suspend fun updateProfile(name: String, lastname: String, userPhoto: String?): Result<User> {
-        delay(1000)
-        val current = currentUser ?: User(
-            id = 42,
-            userCode = 7777,
-            name = "Witaj",
-            lastname = "Użytkowniku",
-            email = "user@wheresxyz.com",
-            userPhoto = null
-        )
-        val updated = current.copy(name = name, lastname = lastname, userPhoto = userPhoto)
-        currentUser = updated
-        return Result.success(updated)
+        return try {
+            val firebaseUser = firebaseAuth.currentUser ?: return Result.failure(IllegalStateException("Not logged in"))
+            val document = withTimeout(8000) {
+                usersCollection.document(firebaseUser.uid).get().await()
+            }
+            val current = document.toObject(User::class.java) ?: User(
+                id = firebaseUser.uid,
+                userCode = Random.nextInt(1000, 9999),
+                name = name,
+                lastname = lastname,
+                email = firebaseUser.email ?: "",
+                userPhoto = userPhoto
+            )
+            val updated = current.copy(name = name, lastname = lastname, userPhoto = userPhoto)
+            withTimeout(8000) {
+                usersCollection.document(firebaseUser.uid).set(updated).await()
+            }
+            Result.success(updated)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 }
