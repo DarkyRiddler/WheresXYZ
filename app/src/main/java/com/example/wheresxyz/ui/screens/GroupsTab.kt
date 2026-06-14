@@ -32,25 +32,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.wheresxyz.data.model.GroupItem
+import com.example.wheresxyz.data.model.GroupMember
+import com.example.wheresxyz.data.model.User
 import com.example.wheresxyz.ui.theme.*
-
-data class GroupMember(
-    val name: String,
-    val lastname: String,
-    val avatar: String, // Emoji or URI
-    val canDelete: Boolean = false,
-    val canModify: Boolean = false,
-    val canCreateEvents: Boolean = false,
-    val isMe: Boolean = false
-)
-
-data class GroupItem(
-    val id: String,
-    val name: String,
-    val code: String,
-    val members: List<GroupMember>,
-    val isAdmin: Boolean = false
-)
 
 @Composable
 fun MemberAvatarsPreview(members: List<GroupMember>, maxVisible: Int = 4) {
@@ -152,138 +137,170 @@ fun PermissionChip(
 }
 
 @Composable
-fun GroupsTab(groupsList: SnapshotStateList<GroupItem>) {
+fun GroupsTab(
+    currentUser: User,
+    groupsList: List<GroupItem>,
+    isLoading: Boolean,
+    error: String?,
+    onCreateGroup: (String) -> Unit,
+    onJoinGroup: (String) -> Unit,
+    onUpdateGroupName: (String, String) -> Unit,
+    onUpdateMemberPermissions: (String, String, Boolean, Boolean, Boolean) -> Unit,
+    onRemoveMember: (String, String) -> Unit,
+    onClearError: () -> Unit
+) {
     val context = LocalContext.current
-    val mockGroupsList = groupsList
+
+    LaunchedEffect(error) {
+        error?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            onClearError()
+        }
+    }
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
-    var selectedGroupForDetails by remember { mutableStateOf<GroupItem?>(null) }
+    var selectedGroupIdForDetails by remember { mutableStateOf<String?>(null) }
+    val selectedGroupForDetails = groupsList.find { it.id == selectedGroupIdForDetails }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp)
         ) {
-            Text(
-                text = "Moje Grupy",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-            
-            Button(
-                onClick = { showCreateDialog = true },
-                colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
-                shape = RoundedCornerShape(10.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Nowa Grupa", color = Color.White, fontWeight = FontWeight.SemiBold)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            items(mockGroupsList) { group ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
-                        .clickable { selectedGroupForDetails = group },
-                    colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                    shape = RoundedCornerShape(16.dp)
+                Text(
+                    text = "Moje Grupy",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                
+                Button(
+                    onClick = { showCreateDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Row(
+                    Text("Nowa Grupa", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                items(groupsList) { group ->
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
+                            .clickable { selectedGroupIdForDetails = group.id },
+                        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = group.name,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                               )
-                                if (group.isAdmin) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .background(BrandCyan.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                                    ) {
-                                        Text(
-                                            text = "Admin",
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = BrandCyan
-                                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = group.name,
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    if (group.isAdmin) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .background(BrandCyan.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "Admin",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = BrandCyan
+                                            )
+                                        }
                                     }
                                 }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${group.members.size} aktywnych członków",
+                                    fontSize = 14.sp,
+                                    color = TextSecondaryDark
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                MemberAvatarsPreview(members = group.members)
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "${group.members.size} aktywnych członków",
-                                fontSize = 14.sp,
-                                color = TextSecondaryDark
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            MemberAvatarsPreview(members = group.members)
-                        }
 
-                        Box(
-                            modifier = Modifier
-                                .background(BrandViolet.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                                .border(1.dp, BrandViolet.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = "#${group.code}",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = BrandViolet
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .background(BrandViolet.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                    .border(1.dp, BrandViolet.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "#${group.code}",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BrandViolet
+                                )
+                            }
                         }
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Large Join Group Button
+            Button(
+                onClick = { showJoinDialog = true },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .border(
+                        width = 1.dp,
+                        brush = Brush.linearGradient(
+                            colors = listOf(BrandCyan, BrandIndigo)
+                        ),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    .clip(RoundedCornerShape(14.dp))
+            ) {
+                Text(
+                    text = "Dołącz do grupy przez kod",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Large Join Group Button
-        Button(
-            onClick = { showJoinDialog = true },
-            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .border(
-                    width = 1.dp,
-                    brush = Brush.linearGradient(
-                        colors = listOf(BrandCyan, BrandIndigo)
-                    ),
-                    shape = RoundedCornerShape(14.dp)
-                )
-                .clip(RoundedCornerShape(14.dp))
-        ) {
-            Text(
-                text = "Dołącz do grupy przez kod",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .clickable(enabled = false) {},
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = BrandCyan)
+            }
         }
     }
 
@@ -316,19 +333,7 @@ fun GroupsTab(groupsList: SnapshotStateList<GroupItem>) {
                 Button(
                     onClick = {
                         if (codeInput.length == 4) {
-                            mockGroupsList.add(
-                                GroupItem(
-                                    id = (100..999).random().toString(),
-                                    name = "Grupa dołączona",
-                                    code = codeInput,
-                                    isAdmin = false,
-                                    members = listOf(
-                                        GroupMember("Tomek", "Kowalski", "🧑‍🚀", canDelete = true, canModify = true, canCreateEvents = true),
-                                        GroupMember("Dawid", "Kowalski", "👤", isMe = true),
-                                        GroupMember("Kasia", "Zielińska", "🙋‍♀️")
-                                    )
-                                )
-                            )
+                            onJoinGroup(codeInput)
                             showJoinDialog = false
                         }
                     },
@@ -376,20 +381,7 @@ fun GroupsTab(groupsList: SnapshotStateList<GroupItem>) {
                 Button(
                     onClick = {
                         if (newGroupNameInput.isNotBlank()) {
-                            val randomCode = (1000..9999).random().toString()
-                            mockGroupsList.add(
-                                GroupItem(
-                                    id = (100..999).random().toString(),
-                                    name = newGroupNameInput,
-                                    code = randomCode,
-                                    isAdmin = true,
-                                    members = listOf(
-                                        GroupMember("Dawid", "Kowalski", "👤", isMe = true),
-                                        GroupMember("Marta", "Zielińska", "🙋‍♀️"),
-                                        GroupMember("Łukasz", "Wiśniewski", "🧑‍💻")
-                                    )
-                                )
-                            )
+                            onCreateGroup(newGroupNameInput)
                             showCreateDialog = false
                         }
                     },
@@ -410,9 +402,9 @@ fun GroupsTab(groupsList: SnapshotStateList<GroupItem>) {
 
     // Details Overlay Dialog
     if (selectedGroupForDetails != null) {
-        val group = selectedGroupForDetails!!
+        val group = selectedGroupForDetails
         androidx.compose.ui.window.Dialog(
-            onDismissRequest = { selectedGroupForDetails = null }
+            onDismissRequest = { selectedGroupIdForDetails = null }
         ) {
             Card(
                 modifier = Modifier
@@ -447,12 +439,7 @@ fun GroupsTab(groupsList: SnapshotStateList<GroupItem>) {
                                 trailingIcon = {
                                     IconButton(onClick = {
                                         if (tempName.isNotBlank()) {
-                                            val updatedGroup = group.copy(name = tempName)
-                                            val grpIndex = mockGroupsList.indexOfFirst { it.id == group.id }
-                                            if (grpIndex != -1) {
-                                                mockGroupsList[grpIndex] = updatedGroup
-                                                selectedGroupForDetails = updatedGroup
-                                            }
+                                            onUpdateGroupName(group.id, tempName)
                                             isEditingName = false
                                         }
                                     }) {
@@ -613,13 +600,7 @@ fun GroupsTab(groupsList: SnapshotStateList<GroupItem>) {
                                     if (canWeDelete && !member.isMe && !isMemberAdmin) {
                                         TextButton(
                                             onClick = {
-                                                val updatedMembers = group.members.filter { it != member }
-                                                val updatedGroup = group.copy(members = updatedMembers)
-                                                val grpIndex = mockGroupsList.indexOfFirst { it.id == group.id }
-                                                if (grpIndex != -1) {
-                                                    mockGroupsList[grpIndex] = updatedGroup
-                                                    selectedGroupForDetails = updatedGroup
-                                                }
+                                                onRemoveMember(group.id, member.email)
                                             },
                                             colors = ButtonDefaults.textButtonColors(contentColor = ErrorRed)
                                         ) {
@@ -639,15 +620,13 @@ fun GroupsTab(groupsList: SnapshotStateList<GroupItem>) {
                                             selected = member.canDelete,
                                             enabled = group.isAdmin,
                                             onClick = {
-                                                val updatedMembers = group.members.map {
-                                                    if (it == member) it.copy(canDelete = !it.canDelete) else it
-                                                }
-                                                val updatedGroup = group.copy(members = updatedMembers)
-                                                val grpIndex = mockGroupsList.indexOfFirst { it.id == group.id }
-                                                if (grpIndex != -1) {
-                                                    mockGroupsList[grpIndex] = updatedGroup
-                                                    selectedGroupForDetails = updatedGroup
-                                                }
+                                                onUpdateMemberPermissions(
+                                                    group.id,
+                                                    member.email,
+                                                    !member.canDelete,
+                                                    member.canModify,
+                                                    member.canCreateEvents
+                                                )
                                             }
                                         )
                                         PermissionChip(
@@ -655,15 +634,13 @@ fun GroupsTab(groupsList: SnapshotStateList<GroupItem>) {
                                             selected = member.canModify,
                                             enabled = group.isAdmin,
                                             onClick = {
-                                                val updatedMembers = group.members.map {
-                                                    if (it == member) it.copy(canModify = !it.canModify) else it
-                                                }
-                                                val updatedGroup = group.copy(members = updatedMembers)
-                                                val grpIndex = mockGroupsList.indexOfFirst { it.id == group.id }
-                                                if (grpIndex != -1) {
-                                                    mockGroupsList[grpIndex] = updatedGroup
-                                                    selectedGroupForDetails = updatedGroup
-                                                }
+                                                onUpdateMemberPermissions(
+                                                    group.id,
+                                                    member.email,
+                                                    member.canDelete,
+                                                    !member.canModify,
+                                                    member.canCreateEvents
+                                                )
                                             }
                                         )
                                         PermissionChip(
@@ -671,15 +648,13 @@ fun GroupsTab(groupsList: SnapshotStateList<GroupItem>) {
                                             selected = member.canCreateEvents,
                                             enabled = group.isAdmin,
                                             onClick = {
-                                                val updatedMembers = group.members.map {
-                                                    if (it == member) it.copy(canCreateEvents = !it.canCreateEvents) else it
-                                                }
-                                                val updatedGroup = group.copy(members = updatedMembers)
-                                                val grpIndex = mockGroupsList.indexOfFirst { it.id == group.id }
-                                                if (grpIndex != -1) {
-                                                    mockGroupsList[grpIndex] = updatedGroup
-                                                    selectedGroupForDetails = updatedGroup
-                                                }
+                                                onUpdateMemberPermissions(
+                                                    group.id,
+                                                    member.email,
+                                                    member.canDelete,
+                                                    member.canModify,
+                                                    !member.canCreateEvents
+                                                )
                                             }
                                         )
                                     }
@@ -691,7 +666,7 @@ fun GroupsTab(groupsList: SnapshotStateList<GroupItem>) {
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Button(
-                        onClick = { selectedGroupForDetails = null },
+                        onClick = { selectedGroupIdForDetails = null },
                         colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()

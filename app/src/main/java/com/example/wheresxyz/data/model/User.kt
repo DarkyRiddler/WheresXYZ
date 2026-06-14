@@ -36,12 +36,12 @@ data class User(
     @get:PropertyName("groups")
     @set:PropertyName("groups")
     @PropertyName("groups")
-    var groups: List<Int> = emptyList(),
+    var groups: List<Any> = emptyList(),
 
     @get:PropertyName("pings")
     @set:PropertyName("pings")
     @PropertyName("pings")
-    var pings: List<Map<String, String>> = emptyList()
+    var pings: List<Any> = emptyList()
 )
 
 data class AuthResponse(

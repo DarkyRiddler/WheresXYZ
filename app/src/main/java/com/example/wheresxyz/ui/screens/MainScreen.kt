@@ -15,8 +15,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.wheresxyz.data.model.GroupItem
+import com.example.wheresxyz.data.model.GroupMember
 import com.example.wheresxyz.data.model.User
 import com.example.wheresxyz.ui.theme.*
+import com.example.wheresxyz.ui.viewmodel.GroupsViewModel
 
 @Composable
 fun rememberUriImage(uriString: String?, context: Context): ImageBitmap? {
@@ -46,47 +50,17 @@ fun MainScreen(
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("Profil", "Grupy", "Wydarzenia")
 
-    val sharedGroupsList = remember {
-        mutableStateListOf(
-            GroupItem(
-                id = "1",
-                name = "Ekipa Festiwalowa",
-                code = "2498",
-                isAdmin = true,
-                members = listOf(
-                    GroupMember("Dawid", "Kowalski", "👤", isMe = true),
-                    GroupMember("Kamil", "Nowak", "🧑‍💻", canModify = true, canCreateEvents = true),
-                    GroupMember("Anna", "Zielińska", "🙋‍♀️", canCreateEvents = true),
-                    GroupMember("Piotr", "Wiśniewski", "🧑‍🚀"),
-                    GroupMember("Maja", "Szymańska", "🧑‍🎨"),
-                    GroupMember("Jan", "Kozłowski", "🙋‍♂️")
-                )
-            ),
-            GroupItem(
-                id = "2",
-                name = "Wyjazd Rodzinny",
-                code = "8051",
-                isAdmin = false,
-                members = listOf(
-                    GroupMember("Marek", "Kowalski", "🙋‍♂️", canDelete = true, canModify = true, canCreateEvents = true),
-                    GroupMember("Dawid", "Kowalski", "👤", isMe = true),
-                    GroupMember("Zofia", "Kowalski", "🙋‍♀️"),
-                    GroupMember("Helena", "Kowalski", "👵")
-                )
-            ),
-            GroupItem(
-                id = "3",
-                name = "Grupa Górska",
-                code = "4490",
-                isAdmin = false,
-                members = listOf(
-                    GroupMember("Tomek", "Wójcik", "🧑‍🚀", canDelete = true, canModify = true, canCreateEvents = true),
-                    GroupMember("Dawid", "Kowalski", "👤", isMe = true, canCreateEvents = true),
-                    GroupMember("Ola", "Kowalczyk", "🧑‍🎨")
-                )
-            )
-        )
+    val groupsViewModel: GroupsViewModel = hiltViewModel()
+    
+    LaunchedEffect(user.email) {
+        if (user.email.isNotEmpty()) {
+            groupsViewModel.loadGroups(user.email)
+        }
     }
+
+    val groupsList by groupsViewModel.groups.collectAsState()
+    val isLoadingGroups by groupsViewModel.isLoading.collectAsState()
+    val groupsError by groupsViewModel.error.collectAsState()
 
     Scaffold(
         bottomBar = {
@@ -129,8 +103,21 @@ fun MainScreen(
         ) {
             when (selectedTab) {
                 0 -> ProfileTab(user = user, onLogoutClick = onLogoutClick, onSaveProfileClick = onSaveProfileClick)
-                1 -> GroupsTab(groupsList = sharedGroupsList)
-                2 -> EventsTab(groupsList = sharedGroupsList, currentUser = user)
+                1 -> GroupsTab(
+                    currentUser = user,
+                    groupsList = groupsList,
+                    isLoading = isLoadingGroups,
+                    error = groupsError,
+                    onCreateGroup = { name -> groupsViewModel.createGroup(name, user) },
+                    onJoinGroup = { code -> groupsViewModel.joinGroup(code, user) },
+                    onUpdateGroupName = { id, name -> groupsViewModel.updateGroupName(id, name) },
+                    onUpdateMemberPermissions = { id, email, del, mod, create ->
+                        groupsViewModel.updateMemberPermissions(id, email, del, mod, create)
+                    },
+                    onRemoveMember = { id, email -> groupsViewModel.removeMember(id, email) },
+                    onClearError = { groupsViewModel.clearError() }
+                )
+                2 -> EventsTab(groupsList = groupsList, currentUser = user)
             }
         }
     }

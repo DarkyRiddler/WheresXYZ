@@ -196,6 +196,39 @@ class AuthRepository @Inject constructor(
             withTimeout(8.seconds) {
                 usersCollection.document(firebaseUser.uid).set(updated).await()
             }
+
+            // Propagate profile changes to all groups this user is a member of
+            try {
+                val groupsCollection = firestore.collection("Groups")
+                val groupsSnapshot = withTimeout(8.seconds) {
+                    groupsCollection.get().await()
+                }
+                val userEmail = updated.email.lowercase().trim()
+                groupsSnapshot.documents.forEach { doc ->
+                    val rawMembers = doc.get("members") as? List<Any?> ?: emptyList()
+                    @Suppress("UNCHECKED_CAST")
+                    val membersList = rawMembers.filter { it is Map<*, *> } as List<Map<String, Any>>
+                    if (membersList.any { (it["email"] as? String ?: "").lowercase().trim() == userEmail }) {
+                        val updatedMembersList = membersList.map { map ->
+                            if ((map["email"] as? String ?: "").lowercase().trim() == userEmail) {
+                                map.toMutableMap().apply {
+                                    put("name", name)
+                                    put("lastname", lastname)
+                                    put("avatar", userPhoto ?: "👤")
+                                }
+                            } else {
+                                map
+                            }
+                        }
+                        withTimeout(8.seconds) {
+                            doc.reference.update("members", updatedMembersList).await()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
             Result.success(updated)
         } catch (e: Exception) {
             Result.failure(e)

@@ -42,6 +42,8 @@ import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.maps.android.compose.rememberMarkerState
+import com.example.wheresxyz.data.model.GroupItem
+import com.example.wheresxyz.data.model.GroupMember
 import com.example.wheresxyz.data.model.User
 import com.example.wheresxyz.ui.theme.*
 import com.example.wheresxyz.ui.viewmodel.LocationSyncState
