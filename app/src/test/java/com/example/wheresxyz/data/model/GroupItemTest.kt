@@ -23,7 +23,7 @@ class GroupItemTest {
         )
 
         assertTrue(members.first { it.isMe }.email == "jan@example.com")
-        assertFalse(members.none { it.email == "anna@example.com" && it.isMe })
+        assertFalse(members.first { it.email == "anna@example.com" }.isMe)
     }
 
     @Test

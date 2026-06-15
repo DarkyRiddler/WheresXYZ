@@ -2,7 +2,9 @@ package com.example.wheresxyz.ui.viewmodel
 
 import com.example.wheresxyz.data.model.Event
 import com.example.wheresxyz.data.model.GroupItem
+import com.example.wheresxyz.data.model.User
 import com.example.wheresxyz.data.repository.EventsRepository
+import com.example.wheresxyz.util.EventAlarmScheduler
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -25,12 +27,21 @@ class EventsViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private val eventsRepository = mockk<EventsRepository>()
+    private val eventAlarmScheduler = mockk<EventAlarmScheduler>(relaxed = true)
     private lateinit var viewModel: EventsViewModel
+
+    private val currentUser = User(
+        id = "uid_1",
+        userCode = 1234,
+        name = "Jan",
+        lastname = "Kowalski",
+        email = "jan@example.com"
+    )
 
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
-        viewModel = EventsViewModel(eventsRepository)
+        viewModel = EventsViewModel(eventsRepository, eventAlarmScheduler)
     }
 
     @After
@@ -40,7 +51,7 @@ class EventsViewModelTest {
 
     @Test
     fun loadEvents_withEmptyGroups_clearsEventsWithoutCallingRepository() = runTest {
-        viewModel.loadEvents(emptyList())
+        viewModel.loadEvents(emptyList(), currentUser)
         advanceUntilIdle()
 
         assertTrue(viewModel.events.value.isEmpty())
@@ -56,7 +67,7 @@ class EventsViewModelTest {
         )
         coEvery { eventsRepository.getEventsForGroups(listOf("g1")) } returns Result.success(events)
 
-        viewModel.loadEvents(groups)
+        viewModel.loadEvents(groups, currentUser)
         advanceUntilIdle()
 
         assertEquals(events, viewModel.events.value)
@@ -83,7 +94,7 @@ class EventsViewModelTest {
             )
         } returns Result.success(newEvent)
 
-        viewModel.loadEvents(listOf(GroupItem(id = "g1", name = "Znajomi", code = "1234")))
+        viewModel.loadEvents(listOf(GroupItem(id = "g1", name = "Znajomi", code = "1234")), currentUser)
         advanceUntilIdle()
 
         var successCalled = false
@@ -94,7 +105,7 @@ class EventsViewModelTest {
             endDate = 3_000L,
             groupId = "g1",
             groupName = "Znajomi",
-            createdBy = "jan@example.com",
+            currentUser = currentUser,
             startLatitude = 52.0,
             startLongitude = 21.0,
             allowedDistance = 100.0
@@ -116,11 +127,11 @@ class EventsViewModelTest {
         coEvery { eventsRepository.getEventsForGroups(any()) } returns Result.success(events)
         coEvery { eventsRepository.deleteEvent("e1") } returns Result.success(Unit)
 
-        viewModel.loadEvents(listOf(GroupItem(id = "g1", name = "Znajomi", code = "1234")))
+        viewModel.loadEvents(listOf(GroupItem(id = "g1", name = "Znajomi", code = "1234")), currentUser)
         advanceUntilIdle()
 
         var successCalled = false
-        viewModel.deleteEvent("e1") { successCalled = true }
+        viewModel.deleteEvent(events.first()) { successCalled = true }
         advanceUntilIdle()
 
         assertTrue(successCalled)

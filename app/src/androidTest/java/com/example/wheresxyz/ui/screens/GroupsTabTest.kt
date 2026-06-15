@@ -212,8 +212,8 @@ class GroupsTabTest {
 
         composeTestRule.onNodeWithText("Znajomi z pracy").performClick()
         composeTestRule.onNodeWithText("KOD GRUPY").assertIsDisplayed()
-        composeTestRule.onNodeWithText("#1234").assertIsDisplayed()
         composeTestRule.onNodeWithText("Członkowie (1)").assertIsDisplayed()
         composeTestRule.onNodeWithText("Jan Kowalski").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Właściciel (Admin)").assertIsDisplayed()
     }
 }
