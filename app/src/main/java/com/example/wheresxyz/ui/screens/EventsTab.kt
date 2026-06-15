@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.ExpandLess
@@ -524,7 +525,15 @@ fun EventsTab(
                         )
                     }
                     items(activeEvents) { event ->
-                        EventCard(event = event, onClick = { selectedLiveEvent = event })
+                        EventCard(
+                            event = event,
+                            onClick = { selectedLiveEvent = event },
+                            onPingAllClick = {
+                                val senderName = "${currentUser.name} ${currentUser.lastname}".trim()
+                                locationSyncViewModel.sendGroupPing(event.groupId, currentUser.email, senderName)
+                                Toast.makeText(context, "Spingowano wszystkich w grupie!", Toast.LENGTH_SHORT).show()
+                            }
+                        )
                     }
                 }
 
@@ -534,7 +543,11 @@ fun EventsTab(
                         SectionHeader(title = "Nadchodzące wydarzenia")
                     }
                     items(upcomingEvents) { event ->
-                        EventCard(event = event, onClick = { selectedLiveEvent = event })
+                        EventCard(
+                            event = event,
+                            onClick = { selectedLiveEvent = event },
+                            onPingAllClick = {}
+                        )
                     }
                 }
 
@@ -551,13 +564,17 @@ fun EventsTab(
                     }
                     if (isArchivalExpanded) {
                         items(archivalEvents) { event ->
-                            EventCard(event = event, onClick = { selectedLiveEvent = event })
+                            EventCard(
+                                event = event,
+                                onClick = { selectedLiveEvent = event },
+                                onPingAllClick = {}
+                            )
                         }
                     }
                 }
+                }
             }
         }
-    }
 
     // Live Event details with Map view
     if (selectedLiveEvent != null) {
@@ -739,7 +756,10 @@ fun EventsTab(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
                                             Box(
                                                 modifier = Modifier
                                                     .size(32.dp)
@@ -770,7 +790,10 @@ fun EventsTab(
                                                         text = participant.name,
                                                         fontSize = 14.sp,
                                                         fontWeight = FontWeight.Medium,
-                                                        color = Color.White
+                                                        color = Color.White,
+                                                        maxLines = 1,
+                                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                        modifier = Modifier.weight(1f, fill = false)
                                                     )
                                                     if (isPartOutside) {
                                                         Spacer(modifier = Modifier.width(6.dp))
@@ -787,7 +810,9 @@ fun EventsTab(
                                                 Text(
                                                     text = "Od Ciebie: ${formatDistanceMeters(participant.distanceMeters)} • Od startu: ${formatDistanceMeters(partDist)}",
                                                     fontSize = 11.sp,
-                                                    color = BrandCyan
+                                                    color = BrandCyan,
+                                                    maxLines = 1,
+                                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                                 )
                                             }
                                         }
@@ -799,7 +824,7 @@ fun EventsTab(
                                                 .border(1.dp, BrandRose.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                                                 .clickable {
                                                     val senderName = "${currentUser.name} ${currentUser.lastname}".trim()
-                                                    locationSyncViewModel.sendPing(participant.userKey, senderName)
+                                                    locationSyncViewModel.sendPing(participant.userKey, currentUser.email, senderName)
                                                     Toast.makeText(context, "Ping wysłany do: ${participant.name}!", Toast.LENGTH_SHORT).show()
                                                 }
                                                 .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -1221,12 +1246,25 @@ fun EventsTabHeaderSection(
             )
 
             Button(
-                onClick = onAddEventClick,
-                colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("Dodaj Wydarzenie", color = Color.White, fontWeight = FontWeight.SemiBold)
-            }
+                                 onClick = onAddEventClick,
+                                 colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
+                                 shape = RoundedCornerShape(10.dp),
+                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                             ) {
+                                 Icon(
+                                     imageVector = Icons.Default.Add,
+                                     contentDescription = "Dodaj",
+                                     tint = Color.White,
+                                     modifier = Modifier.size(16.dp)
+                                 )
+                                 Spacer(modifier = Modifier.width(4.dp))
+                                 Text(
+                                     text = "Dodaj", 
+                                     color = Color.White, 
+                                     fontWeight = FontWeight.SemiBold,
+                                     fontSize = 13.sp
+                                 )
+                             }
         }
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -1318,15 +1356,26 @@ fun SectionHeader(
 @Composable
 fun EventCard(
     event: Event,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onPingAllClick: () -> Unit
 ) {
     val isActive = event.isActive
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
-            .clickable { onClick() },
-        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            .clickable { onClick() }
+            .border(
+                width = 1.dp,
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.15f),
+                        Color.White.copy(alpha = 0.02f),
+                        BrandIndigo.copy(alpha = 0.3f)
+                    )
+                ),
+                shape = RoundedCornerShape(16.dp)
+            ),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF161520)),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(
@@ -1400,31 +1449,40 @@ fun EventCard(
                         }
                     }
                 }
-                Text(
-                    text = formatEventDuration(event.startDate, event.endDate),
-                    fontSize = 12.sp,
-                    color = BrandCyan,
-                    fontWeight = FontWeight.Medium
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Today,
+                        contentDescription = "Czas",
+                        tint = BrandCyan,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = formatEventDuration(event.startDate, event.endDate),
+                        fontSize = 12.sp,
+                        color = BrandCyan,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
 
                 if (isActive) {
                     Box(
                         modifier = Modifier
                             .background(BrandRose.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
                             .border(1.dp, BrandRose.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                            .clickable { onClick() }
+                            .clickable { onPingAllClick() }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.Notifications,
-                                contentDescription = "Pokaż mapę",
+                                contentDescription = "Pingnij wszystkich",
                                 tint = BrandRose,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Podejrzyj mapę",
+                                text = "Pingnij wszystkich",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = BrandRose
