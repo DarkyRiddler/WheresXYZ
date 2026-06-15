@@ -55,7 +55,7 @@ fun calculateBearingDegrees(from: GeoPoint, to: GeoPoint): Double {
 
 fun formatDistanceMeters(distanceMeters: Int): String {
     return if (distanceMeters >= 1000) {
-        String.format("%.1f km", distanceMeters / 1000f)
+        String.format(java.util.Locale.US, "%.1f km", distanceMeters / 1000f)
     } else {
         "${distanceMeters}m"
     }

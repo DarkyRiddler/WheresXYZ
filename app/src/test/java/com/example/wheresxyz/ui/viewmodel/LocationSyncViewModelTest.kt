@@ -39,7 +39,7 @@ class LocationSyncViewModelTest {
         val repository = FakeLocationRepository(sessionResult = Result.success(Unit))
         val viewModel = LocationSyncViewModel(repository)
         val user = User(
-            id = 1,
+            id = "uid_1",
             userCode = 1234,
             name = "Jan",
             lastname = "Kowalski",
@@ -81,7 +81,7 @@ class LocationSyncViewModelTest {
             sessionResult = Result.failure(IllegalStateException("Firebase unavailable"))
         )
         val viewModel = LocationSyncViewModel(repository)
-        val user = User(1, 1234, "Jan", "Kowalski", "jan@example.com")
+        val user = User("uid_1", 1234, "Jan", "Kowalski", "jan@example.com")
 
         viewModel.startSharing("event-1", user)
         advanceUntilIdle()

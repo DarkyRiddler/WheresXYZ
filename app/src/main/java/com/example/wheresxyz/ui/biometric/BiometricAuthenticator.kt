@@ -3,6 +3,7 @@ package com.example.wheresxyz.ui.biometric
 import android.content.Context
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
+import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -13,7 +14,7 @@ class BiometricAuthenticator(private val context: Context) {
 
     fun isBiometricAvailable(): Boolean {
         val biometricManager = BiometricManager.from(context)
-        val authenticators = BIOMETRIC_STRONG or DEVICE_CREDENTIAL
+        val authenticators = BIOMETRIC_STRONG or BIOMETRIC_WEAK or DEVICE_CREDENTIAL
         return when (biometricManager.canAuthenticate(authenticators)) {
             BiometricManager.BIOMETRIC_SUCCESS -> true
             else -> false
@@ -50,7 +51,7 @@ class BiometricAuthenticator(private val context: Context) {
 
         val biometricPrompt = BiometricPrompt(activity, executor, callback)
 
-        // Note: setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)
+        // Note: setAllowedAuthenticators(BIOMETRIC_STRONG or BIOMETRIC_WEAK or DEVICE_CREDENTIAL)
         // enables fallback to PIN/Pattern/Password. If DEVICE_CREDENTIAL is NOT included,
         // we MUST call setNegativeButtonText("Cancel"). Since we allow DEVICE_CREDENTIAL,
         // we cannot call setNegativeButtonText.
@@ -58,7 +59,8 @@ class BiometricAuthenticator(private val context: Context) {
             .setTitle(title)
             .setSubtitle(subtitle)
             .setDescription(description)
-            .setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)
+            .setAllowedAuthenticators(BIOMETRIC_STRONG or BIOMETRIC_WEAK or DEVICE_CREDENTIAL)
+            .setConfirmationRequired(false)
             .build()
 
         biometricPrompt.authenticate(promptInfo)

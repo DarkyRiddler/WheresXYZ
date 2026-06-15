@@ -28,16 +28,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.wheresxyz.ui.theme.*
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun LoginScreen(
     onLoginClick: (String, String) -> Unit,
-    onOAuthClick: (String) -> Unit,
+    onGoogleSignInClick: () -> Unit,
     onNavigateToRegister: () -> Unit,
     errorMessage: String?,
     onClearError: () -> Unit,
     isLoading: Boolean
 ) {
+    val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isPasswordVisible by remember { mutableStateOf(false) }
@@ -46,6 +49,17 @@ fun LoginScreen(
     val isEmailValid = email.isNotEmpty() && android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
     val isPasswordValid = password.length >= 6
     val isFormValid = isEmailValid && isPasswordValid
+
+    var isSubmitted by remember { mutableStateOf(false) }
+    val showEmailError = isSubmitted && !isEmailValid
+    val showPasswordError = isSubmitted && !isPasswordValid
+
+    // Show toast on firebase/auth errors
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) {
+            Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -127,8 +141,18 @@ fun LoginScreen(
                             focusedLabelColor = BrandIndigo,
                             unfocusedLabelColor = TextSecondaryDark,
                             focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            unfocusedTextColor = Color.White,
+                            errorTextColor = Color.White,
+                            errorBorderColor = ErrorRed,
+                            errorLabelColor = ErrorRed,
+                            errorSupportingTextColor = ErrorRed
                         ),
+                        isError = showEmailError,
+                        supportingText = {
+                            if (showEmailError) {
+                                Text("Wprowadź poprawny adres e-mail", color = ErrorRed)
+                            }
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -163,8 +187,18 @@ fun LoginScreen(
                             focusedLabelColor = BrandIndigo,
                             unfocusedLabelColor = TextSecondaryDark,
                             focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            unfocusedTextColor = Color.White,
+                            errorTextColor = Color.White,
+                            errorBorderColor = ErrorRed,
+                            errorLabelColor = ErrorRed,
+                            errorSupportingTextColor = ErrorRed
                         ),
+                        isError = showPasswordError,
+                        supportingText = {
+                            if (showPasswordError) {
+                                Text("Hasło musi mieć co najmniej 6 znaków", color = ErrorRed)
+                            }
+                        },
                         visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         singleLine = true,
@@ -191,8 +225,21 @@ fun LoginScreen(
 
                     // Log In Button
                     Button(
-                        onClick = { onLoginClick(email, password) },
-                        enabled = isFormValid && !isLoading,
+                        onClick = {
+                            isSubmitted = true
+                            if (email.isBlank()) {
+                                Toast.makeText(context, "Wpisz swój adres e-mail", Toast.LENGTH_SHORT).show()
+                            } else if (!isEmailValid) {
+                                Toast.makeText(context, "Niepoprawny format adresu e-mail", Toast.LENGTH_SHORT).show()
+                            } else if (password.isEmpty()) {
+                                Toast.makeText(context, "Wpisz swoje hasło", Toast.LENGTH_SHORT).show()
+                            } else if (!isPasswordValid) {
+                                Toast.makeText(context, "Hasło jest za krótkie (min. 6 znaków)", Toast.LENGTH_SHORT).show()
+                            } else {
+                                onLoginClick(email, password)
+                            }
+                        },
+                        enabled = !isLoading,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.Transparent,
                             disabledContainerColor = BrandIndigo.copy(alpha = 0.3f)
@@ -205,7 +252,11 @@ fun LoginScreen(
                             .border(
                                 width = 1.dp,
                                 brush = Brush.linearGradient(
-                                    colors = listOf(BrandIndigo, BrandViolet)
+                                    colors = if (isFormValid) {
+                                        listOf(BrandIndigo, BrandViolet)
+                                    } else {
+                                        listOf(BrandIndigo.copy(alpha = 0.5f), BrandViolet.copy(alpha = 0.5f))
+                                    }
                                 ),
                                 shape = RoundedCornerShape(14.dp)
                             )
@@ -216,7 +267,11 @@ fun LoginScreen(
                                 .fillMaxSize()
                                 .background(
                                     Brush.horizontalGradient(
-                                        colors = listOf(BrandIndigo, BrandViolet)
+                                        colors = if (isFormValid) {
+                                            listOf(BrandIndigo, BrandViolet)
+                                        } else {
+                                            listOf(BrandIndigo.copy(alpha = 0.4f), BrandViolet.copy(alpha = 0.4f))
+                                        }
                                     )
                                 ),
                             contentAlignment = Alignment.Center
@@ -267,31 +322,15 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Social Buttons Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Google OAuth Button
-                OAuthButton(
-                    providerName = "Google",
-                    backgroundColor = Color(0xFFEA4335).copy(alpha = 0.15f),
-                    textColor = Color(0xFFFEEA35),
-                    borderColor = Color(0xFFEA4335).copy(alpha = 0.4f),
-                    onClick = { onOAuthClick("Google") },
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Github OAuth Button
-                OAuthButton(
-                    providerName = "GitHub",
-                    backgroundColor = Color(0xFF24292E).copy(alpha = 0.4f),
-                    textColor = Color.White,
-                    borderColor = Color.White.copy(alpha = 0.2f),
-                    onClick = { onOAuthClick("GitHub") },
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            // Google Sign-In Button (full width)
+            OAuthButton(
+                providerName = "Google",
+                backgroundColor = Color(0xFFEA4335).copy(alpha = 0.12f),
+                textColor = Color.White,
+                borderColor = Color(0xFFEA4335).copy(alpha = 0.5f),
+                onClick = onGoogleSignInClick,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             Spacer(modifier = Modifier.height(36.dp))
 
