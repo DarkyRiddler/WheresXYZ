@@ -491,98 +491,15 @@ fun EventsTab(
             .fillMaxSize()
             .padding(24.dp)
     ) {
-        // Real-time background location sharing active banner
-        if (syncState == LocationSyncState.Active) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SuccessGreen.copy(alpha = 0.15f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-                    .border(1.dp, SuccessGreen.copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(SuccessGreen, CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Udostępniasz lokalizację w tle",
-                            color = SuccessGreen,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Text(
-                        text = "Zatrzymaj",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Black,
-                        modifier = Modifier
-                            .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                            .clickable { locationSyncViewModel.stopSharing() }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
-                }
-            }
-        }
+        EventsTabHeaderSection(
+            syncState = syncState,
+            isEventsLoading = isEventsLoading,
+            isEventsEmpty = eventsList.isEmpty(),
+            onStopSharing = { locationSyncViewModel.stopSharing() },
+            onAddEventClick = { showCreateEventDialog = true }
+        )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Wydarzenia",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-            
-            Button(
-                onClick = { showCreateEventDialog = true },
-                colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("Dodaj Wydarzenie", color = Color.White, fontWeight = FontWeight.SemiBold)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        if (isEventsLoading && eventsList.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = BrandIndigo)
-            }
-        } else if (eventsList.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 40.dp),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                Text(
-                    text = "Brak nadchodzących wydarzeń.\nStwórz nowe, klikając przycisk u góry!",
-                    color = TextSecondaryDark,
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 20.sp
-                )
-            }
-        } else {
+        if (!isEventsLoading && eventsList.isNotEmpty()) {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.weight(1f)
@@ -1418,6 +1335,110 @@ fun EventsTab(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun EventsTabHeaderSection(
+    syncState: LocationSyncState,
+    isEventsLoading: Boolean,
+    isEventsEmpty: Boolean,
+    onStopSharing: () -> Unit,
+    onAddEventClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        if (syncState == LocationSyncState.Active) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = SuccessGreen.copy(alpha = 0.15f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+                    .border(1.dp, SuccessGreen.copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(SuccessGreen, CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Udostępniasz lokalizację w tle",
+                            color = SuccessGreen,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = "Zatrzymaj",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier
+                            .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                            .clickable(onClick = onStopSharing)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Wydarzenia",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+
+            Button(
+                onClick = onAddEventClick,
+                colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Dodaj Wydarzenie", color = Color.White, fontWeight = FontWeight.SemiBold)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        if (isEventsLoading && isEventsEmpty) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = BrandIndigo)
+            }
+        } else if (isEventsEmpty) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 40.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Text(
+                    text = "Brak nadchodzących wydarzeń.\nStwórz nowe, klikając przycisk u góry!",
+                    color = TextSecondaryDark,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp
+                )
             }
         }
     }

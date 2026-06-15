@@ -68,3 +68,9 @@ Once the backend is ready:
 ---
 
 **Note:** Share the `backend_integration_guide.md` file with your developer for copy-pasteable SQL schemas and JSON templates!
+
+---
+
+## 🧪 Testy
+
+Szczegóły uruchamiania, struktury i wymagań: **[TESTING.md](TESTING.md)**

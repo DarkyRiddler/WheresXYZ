@@ -10,7 +10,8 @@ import com.example.wheresxyz.data.model.displayLabel
 import com.example.wheresxyz.data.model.locationKey
 import com.example.wheresxyz.data.repository.LocationRepository
 import com.example.wheresxyz.util.GeoPoint
-import com.example.wheresxyz.util.calculateDistanceMeters
+import com.example.wheresxyz.util.buildRemoteParticipants
+import com.example.wheresxyz.util.recalculateParticipantDistances
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -112,39 +113,17 @@ class LocationSyncViewModel @Inject constructor(
     }
 
     private fun updateRemoteParticipants(locations: List<com.example.wheresxyz.data.model.SharedLocation>, currentUser: User) {
-        val myLocation = lastMyLocation
-        val now = System.currentTimeMillis()
-
-        _remoteParticipants.value = locations
-            .filter { it.userKey != currentUser.locationKey() && !it.isStale(now) }
-            .map { location ->
-                val distance = myLocation?.let {
-                    calculateDistanceMeters(it, GeoPoint(location.latitude, location.longitude))
-                } ?: 0
-                RemoteParticipant(
-                    userKey = location.userKey,
-                    displayName = location.displayName,
-                    avatar = location.avatar,
-                    latitude = location.latitude,
-                    longitude = location.longitude,
-                    distanceMeters = distance
-                )
-            }
-            .sortedBy { it.distanceMeters }
+        _remoteParticipants.value = buildRemoteParticipants(
+            locations = locations,
+            currentUser = currentUser,
+            myLocation = lastMyLocation
+        )
     }
 
     private fun updateRemoteParticipantsFromCache(latitude: Double, longitude: Double) {
         val current = _remoteParticipants.value
         if (current.isEmpty()) return
 
-        val myPoint = GeoPoint(latitude, longitude)
-        _remoteParticipants.value = current.map { participant ->
-            participant.copy(
-                distanceMeters = calculateDistanceMeters(
-                    myPoint,
-                    GeoPoint(participant.latitude, participant.longitude)
-                )
-            )
-        }.sortedBy { it.distanceMeters }
+        _remoteParticipants.value = recalculateParticipantDistances(current, GeoPoint(latitude, longitude))
     }
 }
