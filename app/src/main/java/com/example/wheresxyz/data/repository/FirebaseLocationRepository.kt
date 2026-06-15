@@ -63,6 +63,40 @@ class FirebaseLocationRepository @Inject constructor(
         }
     }
 
+    override suspend fun sendPing(targetEmail: String, senderEmail: String, senderName: String): Result<Unit> {
+        return try {
+            ensureSession().getOrThrow()
+            val ref = database.getReference("pings").push()
+            val pingData = mapOf(
+                "senderName" to senderName,
+                "senderEmail" to senderEmail,
+                "targetEmail" to targetEmail,
+                "timestamp" to com.google.firebase.database.ServerValue.TIMESTAMP
+            )
+            ref.setValue(pingData).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun sendGroupPing(targetGroupId: String, senderEmail: String, senderName: String): Result<Unit> {
+        return try {
+            ensureSession().getOrThrow()
+            val ref = database.getReference("pings").push()
+            val pingData = mapOf(
+                "senderName" to senderName,
+                "senderEmail" to senderEmail,
+                "targetGroupId" to targetGroupId,
+                "timestamp" to com.google.firebase.database.ServerValue.TIMESTAMP
+            )
+            ref.setValue(pingData).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     private fun SharedLocation.toFirebaseMap(): Map<String, Any> = mapOf(
         "userKey" to userKey,
         "displayName" to displayName,

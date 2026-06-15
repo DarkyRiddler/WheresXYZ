@@ -41,7 +41,12 @@ data class User(
     @get:PropertyName("pings")
     @set:PropertyName("pings")
     @PropertyName("pings")
-    var pings: List<Any> = emptyList()
+    var pings: List<Any> = emptyList(),
+
+    @get:PropertyName("fcm_token")
+    @set:PropertyName("fcm_token")
+    @PropertyName("fcm_token")
+    var fcmToken: String? = null
 )
 
 data class AuthResponse(

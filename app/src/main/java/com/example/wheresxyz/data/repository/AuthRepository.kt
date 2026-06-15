@@ -246,6 +246,18 @@ class AuthRepository @Inject constructor(
             Result.failure(e)
         }
     }
+    suspend fun updateFcmToken(token: String): Result<Unit> {
+        return try {
+            val firebaseUser = firebaseAuth.currentUser ?: return Result.failure(IllegalStateException("Not logged in"))
+            withTimeout(8.seconds) {
+                usersCollection.document(firebaseUser.uid).update("fcm_token", token).await()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     private suspend fun generateUniqueUserCode(): Int {
         while (true) {
             val candidate = Random.nextInt(1000, 10000)
