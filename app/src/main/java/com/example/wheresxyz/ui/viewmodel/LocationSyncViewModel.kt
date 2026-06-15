@@ -25,7 +25,6 @@ sealed interface LocationSyncState {
     object Idle : LocationSyncState
     object Connecting : LocationSyncState
     object Active : LocationSyncState
-    object Fallback : LocationSyncState
 }
 
 data class RemoteParticipant(
@@ -75,13 +74,17 @@ class LocationSyncViewModel @Inject constructor(
     private fun startObservingRemote(eventId: String, user: User) {
         observeJob?.cancel()
         observeJob = viewModelScope.launch {
-            try {
-                locationRepository.observeLocations(eventId).collect { locations ->
-                    updateRemoteParticipants(locations, user)
+            while (true) {
+                try {
+                    locationRepository.observeLocations(eventId).collect { locations ->
+                        _syncState.value = LocationSyncState.Active
+                        updateRemoteParticipants(locations, user)
+                    }
+                } catch (e: Exception) {
+                    _syncState.value = LocationSyncState.Connecting
+                    _remoteParticipants.value = emptyList()
+                    kotlinx.coroutines.delay(5000L) // Wait 5s before retrying database collection
                 }
-            } catch (e: Exception) {
-                _syncState.value = LocationSyncState.Fallback
-                _remoteParticipants.value = emptyList()
             }
         }
     }
