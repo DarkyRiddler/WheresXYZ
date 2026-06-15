@@ -128,6 +128,10 @@ class LocationShareService : Service() {
         locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
         locationListener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
+                // Filter out low accuracy updates (e.g. cell tower triangulation off by > 150m)
+                if (location.hasAccuracy() && location.accuracy > 150f) {
+                    return
+                }
                 publishLocation(location.latitude, location.longitude)
             }
             override fun onProviderEnabled(provider: String) {}
@@ -159,6 +163,9 @@ class LocationShareService : Service() {
             } else lastGps ?: lastNet
 
             best?.let {
+                if (it.hasAccuracy() && it.accuracy > 150f) {
+                    return@let
+                }
                 publishLocation(it.latitude, it.longitude)
             }
         } catch (e: SecurityException) {

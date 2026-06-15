@@ -201,6 +201,9 @@ fun LiveLocationMapView(
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
+                if (location.hasAccuracy() && location.accuracy > 150f) {
+                    return
+                }
                 userLatLng = LatLng(location.latitude, location.longitude)
                 onLocationUpdate(location.latitude, location.longitude)
             }
@@ -220,6 +223,9 @@ fun LiveLocationMapView(
                     else -> lastNet
                 }
                 bestLocation?.let {
+                    if (it.hasAccuracy() && it.accuracy > 150f) {
+                        return@let
+                    }
                     userLatLng = LatLng(it.latitude, it.longitude)
                     onLocationUpdate(it.latitude, it.longitude)
                 }
