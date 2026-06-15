@@ -2,8 +2,9 @@
 
 Welcome to the **Where's XYZ?** project. This is a relational group-tracking and event management application built with modern Android standards.
 
-## 🚀 Current Status: UI & Mock Integration
-Yes, the login and registration flows in the UI are currently running on **Mock data** (via the Hilt-injected `AuthRepositoryImpl.kt`). This allows you to run, view, and test the frontend screens, biometrics, and bottom navigation tabs immediately in your emulator without needing a running server.
+## 🚀 Current Status: Firebase + Compose UI
+
+Aplikacja korzysta z **Firebase** (Auth, Firestore, Realtime Database) oraz **Google Maps**. Konfiguracja: **[FIREBASE_SETUP.md](FIREBASE_SETUP.md)**.
 
 ---
 
@@ -59,12 +60,20 @@ Refer to `backend_integration_guide.md` for the full SQL schema, including:
 ## 🔌 How to Connect the App to the Live API Later
 Once the backend is ready:
 
-1. **Change Base URL**: Update `BASE_URL` in `NetworkModule.kt`:
+1. **Change Base URL**: Update `BASE_URL` in [`NetworkModule.kt`](app/src/main/java/com/example/wheresxyz/di/NetworkModule.kt):
    ```kotlin
    private const val BASE_URL = "https://your-backend-api.com/"
    ```
-2. **Update Hilt Binding**: Switch from the Mock repository to the real `AuthRepositoryImpl` in your Hilt module.
+2. **Wire repositories** to `ApiService` (obecnie dane idą przez Firebase; REST jest przygotowany pod przyszły backend).
 
 ---
 
 **Note:** Share the `backend_integration_guide.md` file with your developer for copy-pasteable SQL schemas and JSON templates!
+
+---
+
+## 🧪 Testy
+
+Szczegóły uruchamiania, struktury i wymagań: **[TESTING.md](TESTING.md)**
+
+Konfiguracja Firebase (logowanie, Firestore, mapy): **[FIREBASE_SETUP.md](FIREBASE_SETUP.md)**

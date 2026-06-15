@@ -37,7 +37,7 @@ class SharedLocationTest {
 
     @Test
     fun userLocationKey_isStableForSameEmail() {
-        val user = User(1, 1234, "Jan", "Kowalski", "Jan@Example.COM")
+        val user = User("uid_1", 1234, "Jan", "Kowalski", "Jan@Example.COM")
         assertEquals("jan@example.com", user.locationKey())
     }
 }

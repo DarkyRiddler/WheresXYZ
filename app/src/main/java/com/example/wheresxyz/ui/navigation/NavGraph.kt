@@ -1,5 +1,8 @@
 package com.example.wheresxyz.ui.navigation
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -15,6 +18,9 @@ import com.example.wheresxyz.ui.biometric.BiometricAuthenticator
 import com.example.wheresxyz.ui.screens.*
 import com.example.wheresxyz.ui.viewmodel.AuthUiState
 import com.example.wheresxyz.ui.viewmodel.AuthViewModel
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 
 object Destinations {
     const val SPLASH = "splash"
@@ -32,7 +38,39 @@ fun NavGraph(
     val context = LocalContext.current
     val activity = context as? FragmentActivity
 
-    // Observe state to perform redirection/navigation changes
+    // Build Google Sign-In client ONCE at NavGraph level
+    val googleSignInOptions = remember {
+        GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken("595256018529-h3rvguoqb6125g1cmnan27b56297bmfr.apps.googleusercontent.com")
+            .requestEmail()
+            .build()
+    }
+    val googleSignInClient = remember(context) {
+        GoogleSignIn.getClient(context, googleSignInOptions)
+    }
+
+    // Launcher is at TOP LEVEL — properly registered with the Activity's result registry
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            try {
+                val account = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                    .getResult(ApiException::class.java)
+                val idToken = account.idToken
+                if (idToken != null) {
+                    viewModel.loginWithGoogle(idToken)
+                } else {
+                    viewModel.onBiometricFailed("Nie udało się pobrać tokenu Google.")
+                }
+            } catch (e: ApiException) {
+                viewModel.onBiometricFailed("Błąd Google Sign-In: kod ${e.statusCode}")
+            }
+        }
+        // If resultCode != RESULT_OK the user simply cancelled — do nothing
+    }
+
+    // Observe state to perform navigation
     LaunchedEffect(uiState) {
         when (uiState) {
             is AuthUiState.LoggedIn -> {
@@ -44,7 +82,6 @@ fun NavGraph(
             is AuthUiState.LoggedOut -> {
                 navController.navigate(Destinations.LOGIN) {
                     popUpTo(Destinations.SPLASH) { inclusive = true }
-                    // Prevent backing back into Main
                     popUpTo(Destinations.MAIN) { inclusive = true }
                 }
             }
@@ -52,26 +89,18 @@ fun NavGraph(
         }
     }
 
-    // Launch Biometric authentication flow when requested
+    // Biometric prompt
     if (activity != null && uiState is AuthUiState.BiometricPromptRequired) {
         val authenticator = remember(context) { BiometricAuthenticator(context) }
         LaunchedEffect(uiState) {
             if (authenticator.isBiometricAvailable()) {
                 authenticator.authenticate(
                     activity = activity,
-                    onSuccess = {
-                        viewModel.onBiometricSuccess()
-                    },
-                    onError = { _, err ->
-                        viewModel.onBiometricFailed(err.toString())
-                    },
-                    onFailed = {
-                        viewModel.onBiometricFailed("Biometric credentials did not match")
-                    }
+                    onSuccess = { viewModel.onBiometricSuccess() },
+                    onError = { _, err -> viewModel.onBiometricFailed(err.toString()) },
+                    onFailed = { viewModel.onBiometricFailed("Biometric credentials did not match") }
                 )
             } else {
-                // Fallback: If biometrics are not set up or configured, go straight to Main View
-                // because the OAuth token is valid.
                 viewModel.onBiometricSuccess()
             }
         }
@@ -98,9 +127,11 @@ fun NavGraph(
                 onLoginClick = { email, password ->
                     viewModel.login(email, password)
                 },
-                onOAuthClick = { provider ->
-                    // Simulate standard OAuth callback flow with a mocked OAuth Token
-                    viewModel.loginWithOAuth(provider, "secure_oauth_token_from_${provider.lowercase()}_provider")
+                onGoogleSignInClick = {
+                    // Force account chooser to show every time
+                    googleSignInClient.signOut().addOnCompleteListener {
+                        googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                    }
                 },
                 onNavigateToRegister = {
                     navController.navigate(Destinations.REGISTER)
@@ -135,9 +166,7 @@ fun NavGraph(
             if (currentUser != null) {
                 MainScreen(
                     user = currentUser,
-                    onLogoutClick = {
-                        viewModel.logout()
-                    },
+                    onLogoutClick = { viewModel.logout() },
                     onSaveProfileClick = { name, lastname, photo ->
                         viewModel.updateProfile(name, lastname, photo)
                     }

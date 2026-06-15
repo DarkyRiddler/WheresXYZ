@@ -34,7 +34,7 @@ class AuthViewModel @Inject constructor(
     fun checkInitialAuthState(isBiometricAvailable: Boolean) {
         viewModelScope.launch {
             _uiState.value = AuthUiState.SplashChecking
-            
+
             // Artificial delay for splash screen animation to finish
             kotlinx.coroutines.delay(2000)
 
@@ -61,15 +61,45 @@ class AuthViewModel @Inject constructor(
         _uiState.value = AuthUiState.LoggedOut
     }
 
+    private fun getLocalizedErrorMessage(message: String?): String {
+        if (message == null) return "Wystąpił nieznany błąd."
+        return when {
+            message.contains("password is invalid", ignoreCase = true) ||
+                    message.contains("INVALID_LOGIN_CREDENTIALS", ignoreCase = true) ||
+                    message.contains("wrong password", ignoreCase = true) ->
+                "Niepoprawny e-mail lub hasło."
+            message.contains("badly formatted", ignoreCase = true) ||
+                    message.contains("INVALID_EMAIL", ignoreCase = true) ->
+                "Niepoprawny format adresu e-mail."
+            message.contains("already in use", ignoreCase = true) ||
+                    message.contains("EMAIL_EXISTS", ignoreCase = true) ->
+                "Ten adres e-mail jest już zarejestrowany."
+            message.contains("weak password", ignoreCase = true) ||
+                    message.contains("WEAK_PASSWORD", ignoreCase = true) ->
+                "Hasło jest za słabe. Musi mieć co najmniej 6 znaków."
+            message.contains("no user record", ignoreCase = true) ||
+                    message.contains("USER_NOT_FOUND", ignoreCase = true) ->
+                "Konto o podanym adresie e-mail nie istnieje."
+            message.contains("network error", ignoreCase = true) ||
+                    message.contains("timeout", ignoreCase = true) ->
+                "Błąd połączenia z siecią. Spróbuj ponownie później."
+            message.contains("too many attempts", ignoreCase = true) ||
+                    message.contains("TOO_MANY_ATTEMPTS_TRY_LATER", ignoreCase = true) ->
+                "Zbyt wiele nieudanych prób. Spróbuj ponownie później."
+            else -> message
+        }
+    }
+
     private fun fetchCurrentUser() {
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
             authRepository.getCurrentUser()
                 .onSuccess { user ->
                     _uiState.value = AuthUiState.LoggedIn(user)
+                    syncFcmToken()
                 }
                 .onFailure { error ->
-                    _uiState.value = AuthUiState.Error(error.message ?: "Failed to get current user info")
+                    _uiState.value = AuthUiState.Error(getLocalizedErrorMessage(error.message ?: "Failed to get current user info"))
                 }
         }
     }
@@ -80,9 +110,10 @@ class AuthViewModel @Inject constructor(
             authRepository.login(email, password)
                 .onSuccess { authResponse ->
                     _uiState.value = AuthUiState.LoggedIn(authResponse.user)
+                    syncFcmToken()
                 }
                 .onFailure { error ->
-                    _uiState.value = AuthUiState.Error(error.message ?: "Login failed")
+                    _uiState.value = AuthUiState.Error(getLocalizedErrorMessage(error.message ?: "Login failed"))
                 }
         }
     }
@@ -93,22 +124,24 @@ class AuthViewModel @Inject constructor(
             authRepository.register(name, lastname, email, password)
                 .onSuccess { authResponse ->
                     _uiState.value = AuthUiState.LoggedIn(authResponse.user)
+                    syncFcmToken()
                 }
                 .onFailure { error ->
-                    _uiState.value = AuthUiState.Error(error.message ?: "Registration failed")
+                    _uiState.value = AuthUiState.Error(getLocalizedErrorMessage(error.message ?: "Registration failed"))
                 }
         }
     }
 
-    fun loginWithOAuth(provider: String, oAuthToken: String) {
+    fun loginWithGoogle(idToken: String) {
         viewModelScope.launch {
             _uiState.value = AuthUiState.Loading
-            authRepository.loginWithOAuth(provider, oAuthToken)
+            authRepository.loginWithGoogle(idToken)
                 .onSuccess { authResponse ->
                     _uiState.value = AuthUiState.LoggedIn(authResponse.user)
+                    syncFcmToken()
                 }
                 .onFailure { error ->
-                    _uiState.value = AuthUiState.Error(error.message ?: "OAuth login failed")
+                    _uiState.value = AuthUiState.Error(getLocalizedErrorMessage(error.message ?: "Google login failed"))
                 }
         }
     }
@@ -128,7 +161,7 @@ class AuthViewModel @Inject constructor(
                     _uiState.value = AuthUiState.LoggedIn(updatedUser)
                 }
                 .onFailure { error ->
-                    _uiState.value = AuthUiState.Error(error.message ?: "Failed to update profile")
+                    _uiState.value = AuthUiState.Error(getLocalizedErrorMessage(error.message ?: "Failed to update profile"))
                 }
         }
     }
@@ -136,6 +169,23 @@ class AuthViewModel @Inject constructor(
     fun clearError() {
         if (_uiState.value is AuthUiState.Error) {
             _uiState.value = AuthUiState.LoggedOut
+        }
+    }
+
+    private fun syncFcmToken() {
+        try {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val token = task.result
+                    if (token != null) {
+                        viewModelScope.launch {
+                            authRepository.updateFcmToken(token)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 }

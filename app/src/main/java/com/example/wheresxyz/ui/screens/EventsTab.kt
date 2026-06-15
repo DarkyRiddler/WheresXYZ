@@ -3,6 +3,10 @@ package com.example.wheresxyz.ui.screens
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -10,18 +14,23 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Today
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,7 +38,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -38,17 +46,25 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.BitmapDescriptor
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.Circle
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.maps.android.compose.rememberMarkerState
+import com.example.wheresxyz.data.model.GroupItem
+import com.example.wheresxyz.data.model.GroupMember
 import com.example.wheresxyz.data.model.User
+import com.example.wheresxyz.data.model.Event
 import com.example.wheresxyz.ui.theme.*
 import com.example.wheresxyz.ui.viewmodel.LocationSyncState
 import com.example.wheresxyz.ui.viewmodel.LocationSyncViewModel
+import com.example.wheresxyz.ui.viewmodel.EventsViewModel
 import com.example.wheresxyz.ui.viewmodel.RemoteParticipant
 import com.example.wheresxyz.util.GeoPoint
 import com.example.wheresxyz.util.calculateOffsetLatLng
+import com.example.wheresxyz.util.calculateDistanceMeters
 import com.example.wheresxyz.util.formatDistanceMeters
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.delay
@@ -57,20 +73,12 @@ data class RadarParticipant(
     val name: String,
     val avatar: String,
     val distanceMeters: Int,
-    val angleDegrees: Double
+    val angleDegrees: Double,
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val userKey: String = ""
 )
 
-data class EventItem(
-    val id: String,
-    val title: String,
-    val groupName: String,
-    val groupId: String,
-    val date: String,
-    val isActive: Boolean,
-    val participants: List<RadarParticipant>
-)
-
-// Math helper kept for fallback mock mode — see util/LocationMath.kt for shared implementation
 private fun offsetFromBase(base: LatLng, distanceMeters: Int, angleDegrees: Double): LatLng {
     val offset = calculateOffsetLatLng(
         GeoPoint(base.latitude, base.longitude),
@@ -80,12 +88,97 @@ private fun offsetFromBase(base: LatLng, distanceMeters: Int, angleDegrees: Doub
     return LatLng(offset.latitude, offset.longitude)
 }
 
+private fun formatEventDuration(start: Long, end: Long): String {
+    val sdfDate = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+    val sdfTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+    val startDateStr = sdfDate.format(java.util.Date(start))
+    val endDateStr = sdfDate.format(java.util.Date(end))
+    val startTimeStr = sdfTime.format(java.util.Date(start))
+    val endTimeStr = sdfTime.format(java.util.Date(end))
+
+    return if (startDateStr == endDateStr) {
+        "$startDateStr $startTimeStr - $endTimeStr"
+    } else {
+        "$startDateStr $startTimeStr - $endDateStr $endTimeStr"
+    }
+}
+
+private fun showDateTimePicker(context: Context, onDateTimeSelected: (Long) -> Unit) {
+    val calendar = java.util.Calendar.getInstance()
+    android.app.DatePickerDialog(
+        context,
+        { _, year, month, dayOfMonth ->
+            calendar.set(java.util.Calendar.YEAR, year)
+            calendar.set(java.util.Calendar.MONTH, month)
+            calendar.set(java.util.Calendar.DAY_OF_MONTH, dayOfMonth)
+            
+            android.app.TimePickerDialog(
+                context,
+                { _, hourOfDay, minute ->
+                    calendar.set(java.util.Calendar.HOUR_OF_DAY, hourOfDay)
+                    calendar.set(java.util.Calendar.MINUTE, minute)
+                    calendar.set(java.util.Calendar.SECOND, 0)
+                    calendar.set(java.util.Calendar.MILLISECOND, 0)
+                    onDateTimeSelected(calendar.timeInMillis)
+                },
+                calendar.get(java.util.Calendar.HOUR_OF_DAY),
+                calendar.get(java.util.Calendar.MINUTE),
+                true
+            ).show()
+        },
+        calendar.get(java.util.Calendar.YEAR),
+        calendar.get(java.util.Calendar.MONTH),
+        calendar.get(java.util.Calendar.DAY_OF_MONTH)
+    ).show()
+}
+
+private fun getInitials(name: String): String {
+    val parts = name.trim().split("\\s+".toRegex())
+    return when {
+        parts.isEmpty() -> "?"
+        parts.size == 1 -> parts[0].take(1).uppercase()
+        else -> "${parts[0].take(1)}${parts[1].take(1)}".uppercase()
+    }
+}
+
+// Generate a beautiful circular marker bitmap with user's initials/avatar emoji inside
+private fun createAvatarBitmapDescriptor(context: Context, text: String): BitmapDescriptor {
+    val sizePx = 90
+    val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    paint.color = android.graphics.Color.parseColor("#4F46E5") // BrandIndigo (#4F46E5)
+    canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, paint)
+    
+    paint.style = Paint.Style.STROKE
+    paint.color = android.graphics.Color.WHITE
+    paint.strokeWidth = 3f
+    canvas.drawCircle(sizePx / 2f, sizePx / 2f, (sizePx / 2f) - 1.5f, paint)
+    
+    paint.style = Paint.Style.FILL
+    paint.color = android.graphics.Color.WHITE
+    val isEmoji = text.any { it.code > 127 }
+    paint.textSize = if (isEmoji) 36f else 28f
+    paint.textAlign = Paint.Align.CENTER
+    paint.isFakeBoldText = true
+    
+    val bounds = Rect()
+    paint.getTextBounds(text, 0, text.length, bounds)
+    val y = (sizePx / 2f) - bounds.exactCenterY()
+    canvas.drawText(text, sizePx / 2f, y, paint)
+    
+    return BitmapDescriptorFactory.fromBitmap(bitmap)
+}
+
 @Composable
 fun LiveLocationMapView(
     remoteParticipants: List<RemoteParticipant>,
-    fallbackParticipants: List<RadarParticipant>,
     syncState: LocationSyncState,
     onLocationUpdate: (Double, Double) -> Unit,
+    event: Event?,
+    currentUserAvatar: String?,
+    currentUserDisplayName: String,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -110,6 +203,9 @@ fun LiveLocationMapView(
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
+                if (location.hasAccuracy() && location.accuracy > 150f) {
+                    return
+                }
                 userLatLng = LatLng(location.latitude, location.longitude)
                 onLocationUpdate(location.latitude, location.longitude)
             }
@@ -129,6 +225,9 @@ fun LiveLocationMapView(
                     else -> lastNet
                 }
                 bestLocation?.let {
+                    if (it.hasAccuracy() && it.accuracy > 150f) {
+                        return@let
+                    }
                     userLatLng = LatLng(it.latitude, it.longitude)
                     onLocationUpdate(it.latitude, it.longitude)
                 }
@@ -165,8 +264,12 @@ fun LiveLocationMapView(
         position = CameraPosition.fromLatLngZoom(userLatLng, 15f)
     }
 
+    var hasCenteredOnUser by remember { mutableStateOf(false) }
     LaunchedEffect(userLatLng) {
-        cameraPositionState.position = CameraPosition.fromLatLngZoom(userLatLng, 15f)
+        if (!hasCenteredOnUser && userLatLng != LatLng(52.2297, 21.0122)) {
+            cameraPositionState.position = CameraPosition.fromLatLngZoom(userLatLng, 15f)
+            hasCenteredOnUser = true
+        }
     }
 
     Box(modifier = modifier) {
@@ -174,32 +277,55 @@ fun LiveLocationMapView(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState
         ) {
-            // User marker
+            // User marker with their custom avatar emoji or initials
+            val myAvatarText = currentUserAvatar?.takeIf { it.isNotEmpty() && it != "👤" } ?: getInitials(currentUserDisplayName)
+            val myIconDescriptor = remember(myAvatarText) {
+                createAvatarBitmapDescriptor(context, myAvatarText)
+            }
+            val userMarkerState = rememberMarkerState(position = userLatLng)
+            LaunchedEffect(userLatLng) {
+                userMarkerState.position = userLatLng
+            }
             Marker(
-                state = rememberMarkerState(position = userLatLng),
-                title = "Ty (Twoja lokalizacja)"
+                state = userMarkerState,
+                title = "Ty (Twoja lokalizacja)",
+                icon = myIconDescriptor
             )
 
-            // Remote participants (Firebase sync) or fallback mock offsets
+            // Event start location marker & geofence circle
+            if (event != null && event.startLatitude != 0.0 && event.startLongitude != 0.0) {
+                Marker(
+                    state = rememberMarkerState(position = LatLng(event.startLatitude, event.startLongitude)),
+                    title = "Start: ${event.title}",
+                    snippet = "Obszar: ${formatDistanceMeters(event.allowedDistance.toInt())}"
+                )
+
+                Circle(
+                    center = LatLng(event.startLatitude, event.startLongitude),
+                    radius = event.allowedDistance,
+                    strokeColor = BrandIndigo,
+                    fillColor = BrandIndigo.copy(alpha = 0.15f),
+                    strokeWidth = 3f
+                )
+            }
+
+            // Remote participants (Firebase sync) with custom avatar icons
             if (syncState == LocationSyncState.Active) {
                 remoteParticipants.forEach { participant ->
+                    val avatarText = participant.avatar.takeIf { it.isNotEmpty() && it != "👤" } ?: getInitials(participant.displayName)
+                    val iconDescriptor = remember(avatarText) {
+                        createAvatarBitmapDescriptor(context, avatarText)
+                    }
+                    val participantLatLng = LatLng(participant.latitude, participant.longitude)
+                    val markerState = rememberMarkerState(key = participant.userKey, position = participantLatLng)
+                    LaunchedEffect(participantLatLng) {
+                        markerState.position = participantLatLng
+                    }
                     Marker(
-                        state = rememberMarkerState(position = LatLng(participant.latitude, participant.longitude)),
+                        state = markerState,
                         title = participant.displayName,
-                        snippet = "Odległość: ${formatDistanceMeters(participant.distanceMeters)}"
-                    )
-                }
-            } else {
-                fallbackParticipants.forEach { participant ->
-                    val participantLatLng = offsetFromBase(
-                        userLatLng,
-                        participant.distanceMeters,
-                        participant.angleDegrees
-                    )
-                    Marker(
-                        state = rememberMarkerState(position = participantLatLng),
-                        title = participant.name,
-                        snippet = "Odległość: ${formatDistanceMeters(participant.distanceMeters)}"
+                        snippet = "Odległość: ${formatDistanceMeters(participant.distanceMeters)}",
+                        icon = iconDescriptor
                     )
                 }
             }
@@ -233,12 +359,14 @@ fun LiveLocationMapView(
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = {
-                            launcher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION
-                                )
+                            val permissions = mutableListOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
                             )
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                            launcher.launch(permissions.toTypedArray())
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo)
                     ) {
@@ -250,13 +378,11 @@ fun LiveLocationMapView(
             val syncLabel = when (syncState) {
                 LocationSyncState.Active -> "SYNCH. LOKALIZACJI AKTYWNA"
                 LocationSyncState.Connecting -> "ŁĄCZENIE Z SYNCH..."
-                LocationSyncState.Fallback -> "LOKALIZACJA GPS (TRYB DEMO)"
                 LocationSyncState.Idle -> "LOKALIZACJA GPS AKTYWNA"
             }
             val syncColor = when (syncState) {
                 LocationSyncState.Active -> SuccessGreen
                 LocationSyncState.Connecting -> BrandCyan
-                LocationSyncState.Fallback -> BrandRose
                 LocationSyncState.Idle -> SuccessGreen
             }
             Box(
@@ -279,54 +405,834 @@ fun LiveLocationMapView(
 }
 
 @Composable
+fun LocationPickerMapView(
+    selectedLatLng: LatLng,
+    onLatLngSelected: (LatLng) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(selectedLatLng, 14f)
+    }
+
+    // Centering the camera target on the selectedLatLng only once when it updates (like default to GPS position)
+    var hasCenteredOnGps by remember { mutableStateOf(false) }
+    LaunchedEffect(selectedLatLng) {
+        if (!hasCenteredOnGps && selectedLatLng != LatLng(52.2297, 21.0122)) {
+            cameraPositionState.position = CameraPosition.fromLatLngZoom(selectedLatLng, 14f)
+            hasCenteredOnGps = true
+        }
+    }
+
+    val markerState = rememberMarkerState()
+    LaunchedEffect(selectedLatLng) {
+        markerState.position = selectedLatLng
+    }
+
+    Box(modifier = modifier) {
+        GoogleMap(
+            modifier = Modifier.fillMaxSize(),
+            cameraPositionState = cameraPositionState,
+            onMapClick = { latLng ->
+                onLatLngSelected(latLng)
+            }
+        ) {
+            Marker(
+                state = markerState,
+                title = "Punkt startowy"
+            )
+        }
+    }
+}
+
+@Composable
 fun EventsTab(
     groupsList: List<GroupItem>,
     currentUser: User,
-    locationSyncViewModel: LocationSyncViewModel = hiltViewModel()
+    locationSyncViewModel: LocationSyncViewModel = hiltViewModel(),
+    eventsViewModel: EventsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val syncState by locationSyncViewModel.syncState.collectAsState()
     val remoteParticipants by locationSyncViewModel.remoteParticipants.collectAsState()
 
-    val eventsList = remember {
-        mutableStateListOf(
-            EventItem(
-                id = "1",
-                title = "Festiwal Letnich Rytmów",
-                groupName = "Ekipa Festiwalowa",
-                groupId = "1",
-                date = "Dziś o 20:00",
-                isActive = true,
-                participants = listOf(
-                    RadarParticipant("Kamil Nowak", "🧑‍💻", 150, 45.0),
-                    RadarParticipant("Anna Zielińska", "🙋‍♀️", 450, 120.0),
-                    RadarParticipant("Piotr Wiśniewski", "🧑‍🚀", 1100, 270.0),
-                    RadarParticipant("Maja Szymańska", "🧑‍🎨", 850, 330.0)
-                )
-            ),
-            EventItem(
-                id = "2",
-                title = "Weekendowy Szlak Górski",
-                groupName = "Grupa Górska",
-                groupId = "3",
-                date = "Niedziela o 08:00",
-                isActive = false,
-                participants = listOf(
-                    RadarParticipant("Tomek Wójcik", "🧑‍🚀", 220, 90.0),
-                    RadarParticipant("Ola Kowalczyk", "🧑‍🎨", 710, 210.0)
-                )
-            )
-        )
+    val eventsList by eventsViewModel.events.collectAsState()
+    val isEventsLoading by eventsViewModel.isLoading.collectAsState()
+    val eventsError by eventsViewModel.error.collectAsState()
+
+    LaunchedEffect(groupsList, currentUser) {
+        eventsViewModel.loadEvents(groupsList, currentUser)
     }
 
     var showCreateEventDialog by remember { mutableStateOf(false) }
-    var selectedLiveEvent by remember { mutableStateOf<EventItem?>(null) }
+    var selectedLiveEvent by remember { mutableStateOf<Event?>(null) }
+
+    // GPS location permissions hook for adding event
+    var hasCreateLocationPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val createLocationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        hasCreateLocationPermission = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    }
+
+    LaunchedEffect(showCreateEventDialog) {
+        if (showCreateEventDialog && !hasCreateLocationPermission) {
+            createLocationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
+
+    var isArchivalExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp)
     ) {
+        EventsTabHeaderSection(
+            syncState = syncState,
+            isEventsLoading = isEventsLoading,
+            isEventsEmpty = eventsList.isEmpty(),
+            onStopSharing = { locationSyncViewModel.stopSharing() },
+            onAddEventClick = { showCreateEventDialog = true }
+        )
+
+        if (!isEventsLoading && eventsList.isNotEmpty()) {
+            val now = System.currentTimeMillis()
+            val activeEvents = eventsList.filter { it.isActive }
+            val upcomingEvents = eventsList.filter { it.startDate > now }
+            val archivalEvents = eventsList.filter { it.endDate < now }
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                // 1. Active Events
+                if (activeEvents.isNotEmpty()) {
+                    item {
+                        SectionHeader(
+                            title = "Aktualne wydarzenia",
+                            showPulseDot = true
+                        )
+                    }
+                    items(activeEvents) { event ->
+                        EventCard(
+                            event = event,
+                            onClick = { selectedLiveEvent = event },
+                            onPingAllClick = {
+                                val senderName = "${currentUser.name} ${currentUser.lastname}".trim()
+                                locationSyncViewModel.sendGroupPing(event.groupId, currentUser.email, senderName)
+                                Toast.makeText(context, "Spingowano wszystkich w grupie!", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
+                }
+
+                // 2. Upcoming Events
+                if (upcomingEvents.isNotEmpty()) {
+                    item {
+                        SectionHeader(title = "Nadchodzące wydarzenia")
+                    }
+                    items(upcomingEvents) { event ->
+                        EventCard(
+                            event = event,
+                            onClick = { selectedLiveEvent = event },
+                            onPingAllClick = {}
+                        )
+                    }
+                }
+
+                // 3. Archival Events (Expandable)
+                if (archivalEvents.isNotEmpty()) {
+                    item {
+                        SectionHeader(
+                            title = "Archiwum",
+                            badgeCount = archivalEvents.size,
+                            isExpandable = true,
+                            isExpanded = isArchivalExpanded,
+                            onHeaderClick = { isArchivalExpanded = !isArchivalExpanded }
+                        )
+                    }
+                    if (isArchivalExpanded) {
+                        items(archivalEvents) { event ->
+                            EventCard(
+                                event = event,
+                                onClick = { selectedLiveEvent = event },
+                                onPingAllClick = {}
+                            )
+                        }
+                    }
+                }
+                }
+            }
+        }
+
+    // Live Event details with Map view
+    if (selectedLiveEvent != null) {
+        val event = selectedLiveEvent!!
+        val isActive = event.isActive
+
+        // Track user's latest GPS position
+        var myLatestLatLng by remember { mutableStateOf(LatLng(52.2297, 21.0122)) }
+
+        val displayParticipants = if (isActive) {
+            remoteParticipants.map { remote ->
+                val dist = calculateDistanceMeters(
+                    GeoPoint(myLatestLatLng.latitude, myLatestLatLng.longitude),
+                    GeoPoint(remote.latitude, remote.longitude)
+                )
+                RadarParticipant(
+                    name = remote.displayName,
+                    avatar = remote.avatar,
+                    distanceMeters = dist,
+                    angleDegrees = 0.0,
+                    latitude = remote.latitude,
+                    longitude = remote.longitude,
+                    userKey = remote.userKey
+                )
+            }
+        } else {
+            emptyList()
+        }
+
+        if (isActive) {
+            LaunchedEffect(event.id, currentUser.email) {
+                locationSyncViewModel.startSharing(event.id, currentUser)
+            }
+        }
+
+        // Calculate user's own distance to the event's start point
+        val myDistToStart = calculateDistanceMeters(
+            GeoPoint(myLatestLatLng.latitude, myLatestLatLng.longitude),
+            GeoPoint(event.startLatitude, event.startLongitude)
+        )
+        val isIOutside = myDistToStart > event.allowedDistance
+
+
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = {
+                selectedLiveEvent = null
+            }
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 600.dp)
+                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(20.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp)
+                ) {
+                    Text(
+                        text = event.title,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Grupa: ${event.groupName}",
+                        fontSize = 13.sp,
+                        color = TextSecondaryDark
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    if (isActive) {
+                        // Live GPS Tracking Map (Fixed at the top, avoiding scroll overlap bugs!)
+                        LiveLocationMapView(
+                            remoteParticipants = remoteParticipants,
+                            syncState = syncState,
+                            onLocationUpdate = { lat, lng ->
+                                myLatestLatLng = LatLng(lat, lng)
+                                locationSyncViewModel.updateMyLocation(lat, lng)
+                            },
+                            event = event,
+                            currentUserAvatar = currentUser.userPhoto,
+                            currentUserDisplayName = "${currentUser.name} ${currentUser.lastname}",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
+                    // Only the details and distances scroll below the map
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Czas trwania: ${formatEventDuration(event.startDate, event.endDate)}",
+                            fontSize = 13.sp,
+                            color = BrandCyan,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        if (event.description.isNotEmpty()) {
+                            Text(
+                                text = event.description,
+                                fontSize = 14.sp,
+                                color = Color.White.copy(alpha = 0.8f)
+                            )
+                        }
+
+                        // Personal geofence warning banner
+                        if (isIOutside && isActive) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = ErrorRed.copy(alpha = 0.15f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(1.dp, ErrorRed.copy(alpha = 0.5f), RoundedCornerShape(10.dp)),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "⚠️ Jesteś poza obszarem wydarzenia! (${formatDistanceMeters(myDistToStart)} / limit: ${formatDistanceMeters(event.allowedDistance.toInt())})",
+                                        color = ErrorRed,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        if (isActive) {
+                            Text(
+                                text = "Odległości znajomych",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+
+                            if (displayParticipants.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(60.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Nikt jeszcze nie udostępnia lokalizacji.",
+                                        color = TextSecondaryDark,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            } else {
+                                // Render display participants directly inside scrollable column (removes LazyColumn nesting conflicts)
+                                displayParticipants.forEach { participant ->
+                                    val partDist = calculateDistanceMeters(
+                                        GeoPoint(participant.latitude, participant.longitude),
+                                        GeoPoint(event.startLatitude, event.startLongitude)
+                                    )
+                                    val isPartOutside = partDist > event.allowedDistance
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color.White.copy(alpha = 0.02f), RoundedCornerShape(12.dp))
+                                            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                                            .padding(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(32.dp)
+                                                    .background(
+                                                        Brush.radialGradient(colors = listOf(BrandViolet, BrandIndigo)),
+                                                        CircleShape
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                val participantEmoji = participant.avatar.takeIf {
+                                                    it.isNotEmpty() && it != "👤" && !it.startsWith("http") && !it.startsWith("content")
+                                                }
+                                                if (participantEmoji != null) {
+                                                    Text(participantEmoji, fontSize = 14.sp)
+                                                } else {
+                                                    Text(
+                                                        text = participant.name.take(1).uppercase().ifEmpty { "?" },
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color.White
+                                                    )
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Column {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        text = participant.name,
+                                                        fontSize = 14.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = Color.White,
+                                                        maxLines = 1,
+                                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                        modifier = Modifier.weight(1f, fill = false)
+                                                    )
+                                                    if (isPartOutside) {
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .background(ErrorRed.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                                .border(0.5.dp, ErrorRed, RoundedCornerShape(4.dp))
+                                                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                                                        ) {
+                                                            Text("POZA OBSZAREM", color = ErrorRed, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
+                                                }
+                                                Text(
+                                                    text = "Od Ciebie: ${formatDistanceMeters(participant.distanceMeters)} • Od startu: ${formatDistanceMeters(partDist)}",
+                                                    fontSize = 11.sp,
+                                                    color = BrandCyan,
+                                                    maxLines = 1,
+                                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+
+                                        // Ping Button
+                                        Box(
+                                            modifier = Modifier
+                                                .background(BrandRose.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                                .border(1.dp, BrandRose.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                                .clickable {
+                                                    val senderName = "${currentUser.name} ${currentUser.lastname}".trim()
+                                                    locationSyncViewModel.sendPing(participant.userKey, currentUser.email, senderName)
+                                                    Toast.makeText(context, "Ping wysłany do: ${participant.name}!", Toast.LENGTH_SHORT).show()
+                                                }
+                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Notifications,
+                                                    contentDescription = "Ping",
+                                                    tint = BrandRose,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(2.dp))
+                                                Text(
+                                                    text = "Ping",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = BrandRose
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // Inactive event message
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = "🔴 Wydarzenie nieaktywne",
+                                        color = BrandRose,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "To wydarzenie odbędzie się w przyszłości lub już się zakończyło. Możliwość wspólnego podglądu pozycji na mapie jest aktywna tylko w czasie trwania wydarzenia.",
+                                        color = TextSecondaryDark,
+                                        fontSize = 13.sp,
+                                        textAlign = TextAlign.Center,
+                                        lineHeight = 18.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // If creator or group admin, allow deletion
+                        val group = groupsList.firstOrNull { it.id == event.groupId }
+                        val isCreator = event.createdBy == currentUser.email
+                        val isAdmin = group?.isAdmin == true
+
+                        if (isCreator || isAdmin) {
+                            OutlinedButton(
+                                onClick = {
+                                    eventsViewModel.deleteEvent(event) {
+                                        Toast.makeText(context, "Usunięto wydarzenie!", Toast.LENGTH_SHORT).show()
+                                        selectedLiveEvent = null
+                                    }
+                                },
+                                border = BorderStroke(1.dp, ErrorRed),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Usuń", color = ErrorRed, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                selectedLiveEvent = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(if (isCreator || isAdmin) 1f else 2f)
+                        ) {
+                            Text("Zamknij", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Add Event Dialog (Optimized layout structure: Map is fixed at the top, form scrolls below to completely avoid scroll container conflict issues)
+    if (showCreateEventDialog) {
+        var eventTitleInput by remember { mutableStateOf("") }
+        var eventDescriptionInput by remember { mutableStateOf("") }
+        var selectedGroupIndex by remember { mutableStateOf(0) }
+        var startDateVal by remember { mutableStateOf(0L) }
+        var endDateVal by remember { mutableStateOf(0L) }
+        var pickedLocation by remember { mutableStateOf(LatLng(52.2297, 21.0122)) } // Default to Warsaw
+        var allowedDistanceInput by remember { mutableStateOf("500") } // Default to 500 meters
+        
+        val eligibleGroups = groupsList.filter { 
+            it.isAdmin || (it.members.find { m -> m.isMe }?.canCreateEvents == true) 
+        }
+
+        // Fetch user's current GPS location to center the picker coordinates automatically when dialog opens
+        LaunchedEffect(hasCreateLocationPermission) {
+            if (hasCreateLocationPermission) {
+                val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                if (locationManager != null) {
+                    try {
+                        val lastGps = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                        val lastNet = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                        val bestLocation = when {
+                            lastGps != null && lastNet != null -> if (lastGps.time > lastNet.time) lastGps else lastNet
+                            lastGps != null -> lastGps
+                            else -> lastNet
+                        }
+                        bestLocation?.let {
+                            pickedLocation = LatLng(it.latitude, it.longitude)
+                        }
+                    } catch (e: SecurityException) {
+                        // ignore
+                    }
+                }
+            }
+        }
+
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showCreateEventDialog = false }
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 600.dp)
+                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(20.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp)
+                ) {
+                    Text(
+                        text = "Dodaj Wydarzenie",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // 1. Fixed Map Picker at the top of the dialog card - completely avoids scroll container conflict issues
+                    Text("Miejsce startu (kliknij na mapie):", color = Color.White, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LocationPickerMapView(
+                        selectedLatLng = pickedLocation,
+                        onLatLngSelected = { pickedLocation = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(170.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // 2. Scrollable container for input fields below the map picker
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (eligibleGroups.isEmpty()) {
+                            Text(
+                                text = "Nie należysz do żadnej grupy w której masz uprawnienia do tworzenia wydarzeń. Musisz być administratorem grupy lub otrzymać odpowiednie uprawnienie.",
+                                color = ErrorRed,
+                                fontSize = 14.sp
+                            )
+                        } else {
+                            // Title
+                            OutlinedTextField(
+                                value = eventTitleInput,
+                                onValueChange = { eventTitleInput = it },
+                                label = { Text("Nazwa wydarzenia", color = TextSecondaryDark) },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = BrandIndigo,
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            // Description
+                            OutlinedTextField(
+                                value = eventDescriptionInput,
+                                onValueChange = { eventDescriptionInput = it },
+                                label = { Text("Opis wydarzenia", color = TextSecondaryDark) },
+                                maxLines = 3,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = BrandIndigo,
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            // Group Selector
+                            Text("Wybierz grupę:", color = Color.White, fontSize = 14.sp)
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                eligibleGroups.forEachIndexed { idx, group ->
+                                    val isSelected = selectedGroupIndex == idx
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                if (isSelected) BrandIndigo.copy(alpha = 0.2f) else Color.Transparent,
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .border(
+                                                1.dp,
+                                                if (isSelected) BrandIndigo else Color.White.copy(alpha = 0.15f),
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .clickable { selectedGroupIndex = idx }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = group.name,
+                                            fontSize = 12.sp,
+                                            color = if (isSelected) BrandCyan else TextSecondaryDark
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Allowed Distance
+                            OutlinedTextField(
+                                value = allowedDistanceInput,
+                                onValueChange = { allowedDistanceInput = it.filter { char -> char.isDigit() } },
+                                label = { Text("Dozwolony promień (w metrach)", color = TextSecondaryDark) },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = BrandIndigo,
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            // Start Date Button
+                            Text("Rozpoczęcie:", color = TextSecondaryDark, fontSize = 12.sp)
+                            Button(
+                                onClick = {
+                                    showDateTimePicker(context) { timestamp ->
+                                        startDateVal = timestamp
+                                        if (endDateVal <= timestamp) {
+                                            endDateVal = timestamp + 2 * 60 * 60 * 1000
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.05f)),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val formatEventDateTime = { timestamp: Long ->
+                                        if (timestamp == 0L) "Wybierz datę i godzinę..."
+                                        else {
+                                            val sdf = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault())
+                                            sdf.format(java.util.Date(timestamp))
+                                        }
+                                    }
+                                    Text(
+                                        text = formatEventDateTime(startDateVal),
+                                        color = if (startDateVal == 0L) TextSecondaryDark else Color.White,
+                                        fontSize = 14.sp
+                                    )
+                                    Icon(Icons.Default.Today, contentDescription = "Wybierz datę", tint = BrandCyan)
+                                }
+                            }
+
+                            // End Date Button
+                            Text("Zakończenie:", color = TextSecondaryDark, fontSize = 12.sp)
+                            Button(
+                                onClick = {
+                                    showDateTimePicker(context) { timestamp ->
+                                        endDateVal = timestamp
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.05f)),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val formatEventDateTime = { timestamp: Long ->
+                                        if (timestamp == 0L) "Wybierz datę i godzinę..."
+                                        else {
+                                            val sdf = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault())
+                                            sdf.format(java.util.Date(timestamp))
+                                        }
+                                    }
+                                    Text(
+                                        text = formatEventDateTime(endDateVal),
+                                        color = if (endDateVal == 0L) TextSecondaryDark else Color.White,
+                                        fontSize = 14.sp
+                                    )
+                                    Icon(Icons.Default.Today, contentDescription = "Wybierz datę", tint = BrandCyan)
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showCreateEventDialog = false },
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Anuluj", color = Color.White)
+                        }
+
+                        if (eligibleGroups.isNotEmpty()) {
+                            val distVal = allowedDistanceInput.toDoubleOrNull() ?: 0.0
+                            val isConfirmEnabled = eventTitleInput.isNotBlank() && startDateVal > 0 && endDateVal > startDateVal && distVal > 0.0
+                            
+                            Button(
+                                onClick = {
+                                    if (isConfirmEnabled) {
+                                        val selectedGroup = eligibleGroups[selectedGroupIndex]
+                                        eventsViewModel.createEvent(
+                                            title = eventTitleInput,
+                                            description = eventDescriptionInput,
+                                            startDate = startDateVal,
+                                            endDate = endDateVal,
+                                            groupId = selectedGroup.id,
+                                            groupName = selectedGroup.name,
+                                            currentUser = currentUser,
+                                            startLatitude = pickedLocation.latitude,
+                                            startLongitude = pickedLocation.longitude,
+                                            allowedDistance = distVal
+                                        ) {
+                                            Toast.makeText(context, "Utworzono wydarzenie!", Toast.LENGTH_SHORT).show()
+                                            showCreateEventDialog = false
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
+                                enabled = isConfirmEnabled,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Utwórz", color = Color.White)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EventsTabHeaderSection(
+    syncState: LocationSyncState,
+    isEventsLoading: Boolean,
+    isEventsEmpty: Boolean,
+    onStopSharing: () -> Unit,
+    onAddEventClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        // We removed the location sharing banner completely as per request 9.2.
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -338,503 +1244,260 @@ fun EventsTab(
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
-            
+
             Button(
-                onClick = { showCreateEventDialog = true },
-                colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("Dodaj Wydarzenie", color = Color.White, fontWeight = FontWeight.SemiBold)
-            }
+                                 onClick = onAddEventClick,
+                                 colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
+                                 shape = RoundedCornerShape(10.dp),
+                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                             ) {
+                                 Icon(
+                                     imageVector = Icons.Default.Add,
+                                     contentDescription = "Dodaj",
+                                     tint = Color.White,
+                                     modifier = Modifier.size(16.dp)
+                                 )
+                                 Spacer(modifier = Modifier.width(4.dp))
+                                 Text(
+                                     text = "Dodaj", 
+                                     color = Color.White, 
+                                     fontWeight = FontWeight.SemiBold,
+                                     fontSize = 13.sp
+                                 )
+                             }
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            items(eventsList) { event ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
-                        .clickable { if (event.isActive) selectedLiveEvent = event },
-                    colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = event.title,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Z grupą: ${event.groupName}",
-                                    fontSize = 14.sp,
-                                    color = TextSecondaryDark
-                                )
-                            }
-
-                            if (event.isActive) {
-                                Box(
-                                    modifier = Modifier
-                                        .background(SuccessGreen.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
-                                        .border(1.dp, SuccessGreen, RoundedCornerShape(10.dp))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = "NA ŻYWO",
-                                        color = SuccessGreen,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Black
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = event.date,
-                                fontSize = 12.sp,
-                                color = BrandCyan,
-                                fontWeight = FontWeight.Medium
-                            )
-
-                            if (event.isActive) {
-                                Box(
-                                    modifier = Modifier
-                                        .background(BrandRose.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                                        .border(1.dp, BrandRose.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                                        .clickable { selectedLiveEvent = event }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = Icons.Default.Notifications,
-                                            contentDescription = "Pokaż mapę",
-                                            tint = BrandRose,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "Podejrzyj mapę",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = BrandRose
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+        if (isEventsLoading && isEventsEmpty) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = BrandIndigo)
             }
-        }
-    }
-
-    // Live Event details with Map view
-    if (selectedLiveEvent != null) {
-        val event = selectedLiveEvent!!
-
-        val activeParticipants = remember(event.id) {
-            mutableStateListOf<RadarParticipant>().apply { addAll(event.participants) }
-        }
-
-        LaunchedEffect(event.id, currentUser.email) {
-            locationSyncViewModel.startSharing(event.id, currentUser)
-        }
-
-        DisposableEffect(event.id) {
-            onDispose {
-                locationSyncViewModel.stopSharing()
-            }
-        }
-
-        LaunchedEffect(event.id, syncState) {
-            if (syncState != LocationSyncState.Fallback) return@LaunchedEffect
-            while (true) {
-                delay(3000L)
-                for (i in activeParticipants.indices) {
-                    val participant = activeParticipants[i]
-                    val deltaDistance = (-15..15).random()
-                    val deltaAngle = (-8..8).random().toDouble()
-                    val newDistance = (participant.distanceMeters + deltaDistance).coerceIn(10, 2000)
-                    val newAngle = (participant.angleDegrees + deltaAngle + 360.0) % 360.0
-                    activeParticipants[i] = participant.copy(
-                        distanceMeters = newDistance,
-                        angleDegrees = newAngle
-                    )
-                }
-            }
-        }
-
-        val displayParticipants = if (syncState == LocationSyncState.Active) {
-            remoteParticipants.map { remote ->
-                RadarParticipant(
-                    name = remote.displayName,
-                    avatar = remote.avatar,
-                    distanceMeters = remote.distanceMeters,
-                    angleDegrees = 0.0
+        } else if (isEventsEmpty) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 40.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Text(
+                    text = "Brak nadchodzących wydarzeń.\nStwórz nowe, klikając przycisk u góry!",
+                    color = TextSecondaryDark,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp
                 )
             }
-        } else {
-            activeParticipants.toList()
-        }
-
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = {
-                locationSyncViewModel.stopSharing()
-                selectedLiveEvent = null
-            }
-        ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 620.dp)
-                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(20.dp)),
-                colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                          Text(
-                              text = event.title,
-                              fontSize = 20.sp,
-                              fontWeight = FontWeight.Bold,
-                              color = Color.White
-                          )
-                          Text(
-                              text = "Grupa: ${event.groupName}",
-                              fontSize = 13.sp,
-                              color = TextSecondaryDark
-                          )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .background(SuccessGreen.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
-                                .border(1.dp, SuccessGreen, RoundedCornerShape(10.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "NA ŻYWO",
-                                color = SuccessGreen,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Black
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Live GPS Tracking Map
-                    LiveLocationMapView(
-                        remoteParticipants = remoteParticipants,
-                        fallbackParticipants = activeParticipants.toList(),
-                        syncState = syncState,
-                        onLocationUpdate = { lat, lng ->
-                            locationSyncViewModel.updateMyLocation(lat, lng)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(250.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = "Odległości znajomych",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        modifier = Modifier.align(Alignment.Start)
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(displayParticipants) { participant ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color.White.copy(alpha = 0.02f), RoundedCornerShape(12.dp))
-                                    .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
-                                    .padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .background(
-                                                Brush.radialGradient(colors = listOf(BrandViolet, BrandIndigo)),
-                                                CircleShape
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (participant.avatar.startsWith("content://") || participant.avatar.startsWith("file://")) {
-                                            val bitmap = rememberUriImage(participant.avatar, context)
-                                            if (bitmap != null) {
-                                                Image(
-                                                    bitmap = bitmap,
-                                                    contentDescription = participant.name,
-                                                    contentScale = ContentScale.Crop,
-                                                    modifier = Modifier.fillMaxSize().clip(CircleShape)
-                                                )
-                                            } else {
-                                                Text(participant.name.take(1), color = Color.White, fontWeight = FontWeight.Bold)
-                                            }
-                                        } else {
-                                            Text(participant.avatar, fontSize = 14.sp)
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(
-                                            text = participant.name,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color = Color.White
-                                        )
-                                        Text(
-                                            text = "Dystans: ${formatDistanceMeters(participant.distanceMeters)}",
-                                            fontSize = 12.sp,
-                                            color = BrandCyan
-                                        )
-                                    }
-                                }
-
-                                // Ping Button
-                                Box(
-                                    modifier = Modifier
-                                        .background(BrandRose.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                                        .border(1.dp, BrandRose.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            Toast.makeText(context, "Ping wysłany do: ${participant.name}!", Toast.LENGTH_SHORT).show()
-                                        }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = Icons.Default.Notifications,
-                                            contentDescription = "Ping",
-                                            tint = BrandRose,
-                                            modifier = Modifier.size(12.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(2.dp))
-                                        Text(
-                                            text = "Ping",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = BrandRose
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Button(
-                        onClick = {
-                            locationSyncViewModel.stopSharing()
-                            selectedLiveEvent = null
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Zamknij", color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
         }
     }
+}
 
-    // Add Event Dialog
-    if (showCreateEventDialog) {
-        var eventTitleInput by remember { mutableStateOf("") }
-        var selectedGroupIndex by remember { mutableStateOf(0) }
-        var isLiveInput by remember { mutableStateOf(true) }
-        var eventDateInput by remember { mutableStateOf("") }
-        
-        val eligibleGroups = groupsList.filter { 
-            it.isAdmin || (it.members.find { m -> m.isMe }?.canCreateEvents == true) 
+@Composable
+fun SectionHeader(
+    title: String,
+    badgeCount: Int? = null,
+    isExpandable: Boolean = false,
+    isExpanded: Boolean = false,
+    onHeaderClick: (() -> Unit)? = null,
+    showPulseDot: Boolean = false
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .let { if (onHeaderClick != null) it.clickable { onHeaderClick() } else it }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (showPulseDot) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(SuccessGreen, CircleShape)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            if (badgeCount != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = badgeCount.toString(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondaryDark
+                    )
+                }
+            }
         }
+        if (isExpandable) {
+            Icon(
+                imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = "Rozwiń",
+                tint = TextSecondaryDark
+            )
+        }
+    }
+}
 
-        AlertDialog(
-            onDismissRequest = { showCreateEventDialog = false },
-            title = { Text("Dodaj Wydarzenie", color = Color.White, fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    if (eligibleGroups.isEmpty()) {
-                        Text(
-                            text = "Nie należysz do żadnej grupy w której masz uprawnienia do tworzenia wydarzeń. Musisz być administratorem grupy lub otrzymać odpowiednie uprawnienie.",
-                            color = ErrorRed,
-                            fontSize = 14.sp
-                        )
-                    } else {
-                        // Title
-                        OutlinedTextField(
-                            value = eventTitleInput,
-                            onValueChange = { eventTitleInput = it },
-                            label = { Text("Nazwa wydarzenia", color = TextSecondaryDark) },
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = BrandIndigo,
-                                unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Group Selector
-                        Text("Wybierz grupę:", color = Color.White, fontSize = 14.sp)
+@Composable
+fun EventCard(
+    event: Event,
+    onClick: () -> Unit,
+    onPingAllClick: () -> Unit
+) {
+    val isActive = event.isActive
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .border(
+                width = 1.dp,
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.15f),
+                        Color.White.copy(alpha = 0.02f),
+                        BrandIndigo.copy(alpha = 0.3f)
+                    )
+                ),
+                shape = RoundedCornerShape(16.dp)
+            ),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF161520)),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = event.title,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Z grupą: ${event.groupName}",
+                        fontSize = 14.sp,
+                        color = TextSecondaryDark
+                    )
+                    if (event.description.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(6.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            eligibleGroups.forEachIndexed { idx, group ->
-                                val isSelected = selectedGroupIndex == idx
-                                Box(
-                                    modifier = Modifier
-                                        .background(
-                                            if (isSelected) BrandIndigo.copy(alpha = 0.2f) else Color.Transparent,
-                                            RoundedCornerShape(8.dp)
-                                        )
-                                        .border(
-                                            1.dp,
-                                            if (isSelected) BrandIndigo else Color.White.copy(alpha = 0.15f),
-                                            RoundedCornerShape(8.dp)
-                                        )
-                                        .clickable { selectedGroupIndex = idx }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                                ) {
-                                    Text(
-                                        text = group.name,
-                                        fontSize = 12.sp,
-                                        color = if (isSelected) BrandCyan else TextSecondaryDark
-                                    )
-                                }
-                            }
+                        Text(
+                            text = event.description,
+                            fontSize = 13.sp,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+
+                if (isActive) {
+                    Box(
+                        modifier = Modifier
+                            .background(SuccessGreen.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                            .border(1.dp, SuccessGreen, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "NA ŻYWO",
+                            color = SuccessGreen,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val formatEventDuration = remember {
+                    { start: Long, end: Long ->
+                        val sdfDate = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                        val sdfTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                        val startDateStr = sdfDate.format(java.util.Date(start))
+                        val endDateStr = sdfDate.format(java.util.Date(end))
+                        val startTimeStr = sdfTime.format(java.util.Date(start))
+                        val endTimeStr = sdfTime.format(java.util.Date(end))
+
+                        if (startDateStr == endDateStr) {
+                            "$startDateStr $startTimeStr - $endTimeStr"
+                        } else {
+                            "$startDateStr $startTimeStr - $endDateStr $endTimeStr"
                         }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Today,
+                        contentDescription = "Czas",
+                        tint = BrandCyan,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = formatEventDuration(event.startDate, event.endDate),
+                        fontSize = 12.sp,
+                        color = BrandCyan,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
 
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Is Live Switch/Checkbox
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Checkbox(
-                                checked = isLiveInput,
-                                onCheckedChange = { isLiveInput = it },
-                                colors = CheckboxDefaults.colors(checkedColor = BrandIndigo)
+                if (isActive) {
+                    Box(
+                        modifier = Modifier
+                            .background(BrandRose.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                            .border(1.dp, BrandRose.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                            .clickable { onPingAllClick() }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Pingnij wszystkich",
+                                tint = BrandRose,
+                                modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Rozpocznij teraz (Wydarzenie na żywo)", color = Color.White, fontSize = 14.sp)
-                        }
-
-                        if (!isLiveInput) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = eventDateInput,
-                                onValueChange = { eventDateInput = it },
-                                label = { Text("Kiedy się odbędzie (np. Jutro o 18:00)", color = TextSecondaryDark) },
-                                singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = BrandIndigo,
-                                    unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
-                                ),
-                                modifier = Modifier.fillMaxWidth()
+                            Text(
+                                text = "Pingnij wszystkich",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BrandRose
                             )
                         }
                     }
+                } else {
+                    Text(
+                        text = if (event.startDate > System.currentTimeMillis()) "Nadchodzące" else "Zakończone",
+                        fontSize = 11.sp,
+                        color = TextSecondaryDark,
+                        fontWeight = FontWeight.Normal
+                    )
                 }
-            },
-            confirmButton = {
-                if (eligibleGroups.isNotEmpty()) {
-                    Button(
-                        onClick = {
-                            if (eventTitleInput.isNotBlank()) {
-                                val selectedGroup = eligibleGroups[selectedGroupIndex]
-                                val groupMembers = selectedGroup.members.filter { !it.isMe }
-                                val participants = groupMembers.map { member ->
-                                    RadarParticipant(
-                                        name = "${member.name} ${member.lastname}",
-                                        avatar = member.avatar,
-                                        distanceMeters = (50..1200).random(),
-                                        angleDegrees = (0..359).random().toDouble()
-                                    )
-                                }
-
-                                eventsList.add(
-                                    EventItem(
-                                        id = (100..999).random().toString(),
-                                        title = eventTitleInput,
-                                        groupName = selectedGroup.name,
-                                        groupId = selectedGroup.id,
-                                        date = if (isLiveInput) "Rozpoczęło się teraz" else eventDateInput,
-                                        isActive = isLiveInput,
-                                        participants = participants
-                                    )
-                                )
-                                showCreateEventDialog = false
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
-                        enabled = eventTitleInput.isNotBlank() && (isLiveInput || eventDateInput.isNotBlank())
-                    ) {
-                        Text("Utwórz", color = Color.White)
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCreateEventDialog = false }) {
-                    Text("Anuluj", color = Color.White)
-                }
-            },
-            containerColor = DarkSurface
-        )
+            }
+        }
     }
 }

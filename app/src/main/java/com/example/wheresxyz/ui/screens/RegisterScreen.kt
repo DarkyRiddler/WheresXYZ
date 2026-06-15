@@ -29,6 +29,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.wheresxyz.ui.theme.*
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun RegisterScreen(
@@ -38,6 +40,7 @@ fun RegisterScreen(
     onClearError: () -> Unit,
     isLoading: Boolean
 ) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var lastname by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -50,6 +53,19 @@ fun RegisterScreen(
     val isEmailValid = email.isNotEmpty() && android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
     val isPasswordValid = password.length >= 6
     val isFormValid = isNameValid && isLastnameValid && isEmailValid && isPasswordValid
+
+    var isSubmitted by remember { mutableStateOf(false) }
+    val showNameError = isSubmitted && !isNameValid
+    val showLastnameError = isSubmitted && !isLastnameValid
+    val showEmailError = isSubmitted && !isEmailValid
+    val showPasswordError = isSubmitted && !isPasswordValid
+
+    // Show toast on firebase/auth errors
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null) {
+            Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -131,8 +147,18 @@ fun RegisterScreen(
                             focusedLabelColor = BrandIndigo,
                             unfocusedLabelColor = TextSecondaryDark,
                             focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            unfocusedTextColor = Color.White,
+                            errorTextColor = Color.White,
+                            errorBorderColor = ErrorRed,
+                            errorLabelColor = ErrorRed,
+                            errorSupportingTextColor = ErrorRed
                         ),
+                        isError = showNameError,
+                        supportingText = {
+                            if (showNameError) {
+                                Text("Imię nie może być puste", color = ErrorRed)
+                            }
+                        },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -157,8 +183,18 @@ fun RegisterScreen(
                             focusedLabelColor = BrandIndigo,
                             unfocusedLabelColor = TextSecondaryDark,
                             focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            unfocusedTextColor = Color.White,
+                            errorTextColor = Color.White,
+                            errorBorderColor = ErrorRed,
+                            errorLabelColor = ErrorRed,
+                            errorSupportingTextColor = ErrorRed
                         ),
+                        isError = showLastnameError,
+                        supportingText = {
+                            if (showLastnameError) {
+                                Text("Nazwisko nie może być puste", color = ErrorRed)
+                            }
+                        },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -183,8 +219,18 @@ fun RegisterScreen(
                             focusedLabelColor = BrandIndigo,
                             unfocusedLabelColor = TextSecondaryDark,
                             focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            unfocusedTextColor = Color.White,
+                            errorTextColor = Color.White,
+                            errorBorderColor = ErrorRed,
+                            errorLabelColor = ErrorRed,
+                            errorSupportingTextColor = ErrorRed
                         ),
+                        isError = showEmailError,
+                        supportingText = {
+                            if (showEmailError) {
+                                Text("Wprowadź poprawny adres e-mail", color = ErrorRed)
+                            }
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -219,8 +265,18 @@ fun RegisterScreen(
                             focusedLabelColor = BrandIndigo,
                             unfocusedLabelColor = TextSecondaryDark,
                             focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            unfocusedTextColor = Color.White,
+                            errorTextColor = Color.White,
+                            errorBorderColor = ErrorRed,
+                            errorLabelColor = ErrorRed,
+                            errorSupportingTextColor = ErrorRed
                         ),
+                        isError = showPasswordError,
+                        supportingText = {
+                            if (showPasswordError) {
+                                Text("Hasło musi mieć co najmniej 6 znaków", color = ErrorRed)
+                            }
+                        },
                         visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         singleLine = true,
@@ -247,8 +303,25 @@ fun RegisterScreen(
 
                     // Register Button
                     Button(
-                        onClick = { onRegisterClick(name, lastname, email, password) },
-                        enabled = isFormValid && !isLoading,
+                        onClick = {
+                            isSubmitted = true
+                            if (name.isBlank()) {
+                                Toast.makeText(context, "Wpisz swoje imię", Toast.LENGTH_SHORT).show()
+                            } else if (lastname.isBlank()) {
+                                Toast.makeText(context, "Wpisz swoje nazwisko", Toast.LENGTH_SHORT).show()
+                            } else if (email.isBlank()) {
+                                Toast.makeText(context, "Wpisz swój adres e-mail", Toast.LENGTH_SHORT).show()
+                            } else if (!isEmailValid) {
+                                Toast.makeText(context, "Niepoprawny format adresu e-mail", Toast.LENGTH_SHORT).show()
+                            } else if (password.isEmpty()) {
+                                Toast.makeText(context, "Wpisz hasło", Toast.LENGTH_SHORT).show()
+                            } else if (!isPasswordValid) {
+                                Toast.makeText(context, "Hasło jest za krótkie (min. 6 znaków)", Toast.LENGTH_SHORT).show()
+                            } else {
+                                onRegisterClick(name, lastname, email, password)
+                            }
+                        },
+                        enabled = !isLoading,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.Transparent,
                             disabledContainerColor = BrandIndigo.copy(alpha = 0.3f)
@@ -261,7 +334,11 @@ fun RegisterScreen(
                             .border(
                                 width = 1.dp,
                                 brush = Brush.linearGradient(
-                                    colors = listOf(BrandIndigo, BrandViolet)
+                                    colors = if (isFormValid) {
+                                        listOf(BrandIndigo, BrandViolet)
+                                    } else {
+                                        listOf(BrandIndigo.copy(alpha = 0.5f), BrandViolet.copy(alpha = 0.5f))
+                                    }
                                 ),
                                 shape = RoundedCornerShape(14.dp)
                             )
@@ -272,7 +349,11 @@ fun RegisterScreen(
                                 .fillMaxSize()
                                 .background(
                                     Brush.horizontalGradient(
-                                        colors = listOf(BrandIndigo, BrandViolet)
+                                        colors = if (isFormValid) {
+                                            listOf(BrandIndigo, BrandViolet)
+                                        } else {
+                                            listOf(BrandIndigo.copy(alpha = 0.4f), BrandViolet.copy(alpha = 0.4f))
+                                        }
                                     )
                                 ),
                             contentAlignment = Alignment.Center
