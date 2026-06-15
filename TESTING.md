@@ -49,18 +49,20 @@ Bez tego pliku build padnie na tasku `:app:processDebugGoogleServices`.
 | `data/model/EventTest.kt` | `Event.isActive` — granice czasowe |
 | `data/model/SharedLocationTest.kt` | Staleness lokalizacji, `User.locationKey()` |
 | `data/model/UserTest.kt` | `displayLabel()`, `locationKey()` |
-| `ui/viewmodel/AuthViewModelTest.kt` | Splash, biometria, login, logout, polskie błędy |
-| `ui/viewmodel/GroupsViewModelTest.kt` | Ładowanie, join, opuszczenie grupy |
+| `ui/viewmodel/AuthViewModelTest.kt` | Splash, biometria, login, rejestracja, profil, logout, polskie błędy |
+| `ui/viewmodel/GroupsViewModelTest.kt` | Ładowanie, tworzenie, join, zmiana nazwy, uprawnienia, opuszczenie grupy |
 | `ui/viewmodel/EventsViewModelTest.kt` | Ładowanie, tworzenie, usuwanie wydarzeń |
-| `data/remote/ApiServiceIntegrationTest.kt` | Kontrakt REST + błędy HTTP 401/404/500 |
+| `data/model/GroupItemTest.kt` | Domyślne pola `GroupItem` i flaga `isMe` członka |
+| `data/remote/ApiServiceIntegrationTest.kt` | Kontrakt REST (auth, users, groups) + błędy HTTP |
 
 ### Testy instrumentowane (`app/src/androidTest/`)
 
 | Plik | Co testuje |
 | :--- | :--- |
-| `ui/screens/LoginScreenTest.kt` | Renderowanie pól i przycisków ekranu logowania |
-| `ui/screens/RegisterScreenTest.kt` | Pola rejestracji i nawigacja do logowania |
-| `ui/screens/GroupsTabTest.kt` | Nagłówek grup, przyciski, lista grup |
+| `ui/screens/LoginScreenTest.kt` | Renderowanie, wpisywanie danych, wyświetlanie błędu |
+| `ui/screens/RegisterScreenTest.kt` | Pola rejestracji, submit formularza, nawigacja do logowania |
+| `ui/screens/GroupsTabTest.kt` | Lista grup, dialogi tworzenia/dołączania, szczegóły grupy |
+| `ui/screens/ProfileTabTest.kt` | Profil użytkownika, edycja, wylogowanie |
 | `ui/screens/EventsTabHeaderSectionTest.kt` | Pusty stan wydarzeń, banner udostępniania lokalizacji |
 | `ExampleInstrumentedTest.kt` | Smoke test — poprawny `packageName` |
 
@@ -71,7 +73,7 @@ Bez tego pliku build padnie na tasku `:app:processDebugGoogleServices`.
 `ApiServiceIntegrationTest` weryfikuje, że `ApiService` i modele w `data/remote/model/ApiModels.kt` zgadzają się z kontraktem opisanym w `backend_integration_guide.md`.
 
 - Używa **OkHttp MockWebServer** — nie potrzeba działającego backendu.
-- Sprawdza deserializację odpowiedzi (login, register, groups), payload requestów i błędy HTTP (401, 404, 500).
+- Sprawdza deserializację odpowiedzi (login, register, OAuth, groups, create/join), payload requestów i błędy HTTP (401, 404, 409, 500).
 
 ---
 
@@ -115,6 +117,6 @@ app/build/reports/androidTests/connected/index.html
 
 ### Ostatnio dodane
 
-- `UserTest`, `recalculateParticipantDistances` w `LocationParticipantMapperTest`
-- Błędy HTTP 401/404/500 w `ApiServiceIntegrationTest`
-- `RegisterScreenTest`, `GroupsTabTest`, `EventsTabHeaderSectionTest`
+- `GroupItemTest`, rozszerzone `GroupsViewModelTest` i `AuthViewModelTest` (grupy + użytkownicy)
+- API: `createGroup`, `joinGroup`, `loginWithOAuth` + błędy 409/404 w `ApiServiceIntegrationTest`
+- UI: interakcje w `LoginScreenTest`, `RegisterScreenTest`, `GroupsTabTest`, nowy `ProfileTabTest`

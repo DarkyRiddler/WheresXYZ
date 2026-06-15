@@ -4,8 +4,11 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.wheresxyz.ui.theme.WheresXYZTheme
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -36,5 +39,54 @@ class LoginScreenTest {
         composeTestRule.onNodeWithContentDescription("Hasło").assertIsDisplayed()
         composeTestRule.onNodeWithText("Zaloguj się").assertIsDisplayed()
         composeTestRule.onNodeWithText("Zarejestruj się").assertIsDisplayed()
+    }
+
+    @Test
+    fun loginScreen_fillsCredentialsAndSubmitsLogin() {
+        var submittedEmail: String? = null
+        var submittedPassword: String? = null
+
+        composeTestRule.setContent {
+            WheresXYZTheme {
+                LoginScreen(
+                    onLoginClick = { email, password ->
+                        submittedEmail = email
+                        submittedPassword = password
+                    },
+                    onGoogleSignInClick = {},
+                    onNavigateToRegister = {},
+                    errorMessage = null,
+                    onClearError = {},
+                    isLoading = false
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("E-mail").performClick()
+        composeTestRule.onNodeWithContentDescription("E-mail").performTextInput("jan@example.com")
+        composeTestRule.onNodeWithContentDescription("Hasło").performClick()
+        composeTestRule.onNodeWithContentDescription("Hasło").performTextInput("secret123")
+        composeTestRule.onNodeWithText("Zaloguj się").performClick()
+
+        assertEquals("jan@example.com", submittedEmail)
+        assertEquals("secret123", submittedPassword)
+    }
+
+    @Test
+    fun loginScreen_displaysErrorMessage() {
+        composeTestRule.setContent {
+            WheresXYZTheme {
+                LoginScreen(
+                    onLoginClick = { _, _ -> },
+                    onGoogleSignInClick = {},
+                    onNavigateToRegister = {},
+                    errorMessage = "Niepoprawny e-mail lub hasło.",
+                    onClearError = {},
+                    isLoading = false
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Niepoprawny e-mail lub hasło.").assertIsDisplayed()
     }
 }

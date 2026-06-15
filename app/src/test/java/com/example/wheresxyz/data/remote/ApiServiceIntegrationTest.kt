@@ -1,6 +1,9 @@
 package com.example.wheresxyz.data.remote
 
+import com.example.wheresxyz.data.remote.model.CreateGroupRequest
+import com.example.wheresxyz.data.remote.model.JoinGroupRequest
 import com.example.wheresxyz.data.remote.model.LoginRequest
+import com.example.wheresxyz.data.remote.model.OAuthRequest
 import com.example.wheresxyz.data.remote.model.RegisterRequest
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
@@ -243,5 +246,167 @@ class ApiServiceIntegrationTest {
         assertEquals("Bearer jwt-token", recordedRequest.getHeader("Authorization"))
         assertEquals("142", user.id)
         assertEquals("johndoe@example.com", user.email)
+    }
+
+    @Test
+    fun createGroup_sendsNamePayloadAndParsesResponse() = runTest {
+        mockWebServer.enqueue(
+            MockResponse()
+                .setResponseCode(201)
+                .setBody(
+                    """
+                    {
+                      "id": "g-new",
+                      "name": "Wycieczka",
+                      "code": "9876",
+                      "members": [
+                        {
+                          "name": "Jan",
+                          "lastname": "Kowalski",
+                          "email": "jan@example.com",
+                          "canDelete": true,
+                          "canModify": true,
+                          "canCreateEvents": true
+                        }
+                      ]
+                    }
+                    """.trimIndent()
+                )
+        )
+
+        val group = apiService.createGroup(CreateGroupRequest(name = "Wycieczka"))
+
+        val recordedRequest = mockWebServer.takeRequest()
+        assertEquals("POST", recordedRequest.method)
+        assertEquals("/api/groups", recordedRequest.path)
+        val requestBody = JsonParser.parseString(recordedRequest.body.readUtf8()).asJsonObject
+        assertEquals("Wycieczka", requestBody.get("name").asString)
+
+        assertEquals("g-new", group.id)
+        assertEquals("Wycieczka", group.name)
+        assertEquals("9876", group.code)
+        assertEquals(1, group.members.size)
+        assertEquals(true, group.members.first().canDelete)
+    }
+
+    @Test
+    fun joinGroup_sendsCodePayloadAndParsesUpdatedGroup() = runTest {
+        mockWebServer.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "id": "g1",
+                      "name": "Znajomi",
+                      "code": "1234",
+                      "members": [
+                        {
+                          "name": "Jan",
+                          "lastname": "Kowalski",
+                          "email": "jan@example.com",
+                          "canDelete": true,
+                          "canModify": true,
+                          "canCreateEvents": true
+                        },
+                        {
+                          "name": "Anna",
+                          "lastname": "Nowak",
+                          "email": "anna@example.com",
+                          "canDelete": false,
+                          "canModify": false,
+                          "canCreateEvents": false
+                        }
+                      ]
+                    }
+                    """.trimIndent()
+                )
+        )
+
+        val group = apiService.joinGroup(
+            groupId = "g1",
+            body = JoinGroupRequest(code = "1234")
+        )
+
+        val recordedRequest = mockWebServer.takeRequest()
+        assertEquals("POST", recordedRequest.method)
+        assertEquals("/api/groups/g1/join", recordedRequest.path)
+        val requestBody = JsonParser.parseString(recordedRequest.body.readUtf8()).asJsonObject
+        assertEquals("1234", requestBody.get("code").asString)
+
+        assertEquals(2, group.members.size)
+        assertEquals("anna@example.com", group.members[1].email)
+        assertEquals(false, group.members[1].canCreateEvents)
+    }
+
+    @Test
+    fun loginWithOAuth_sendsProviderAndToken() = runTest {
+        mockWebServer.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "accessToken": "oauth-jwt",
+                      "refreshToken": "oauth-refresh",
+                      "expiresIn": 7200,
+                      "user": {
+                        "id": "55",
+                        "userCode": 1111,
+                        "name": "Google",
+                        "lastname": "User",
+                        "email": "google@example.com"
+                      }
+                    }
+                    """.trimIndent()
+                )
+        )
+
+        val response = apiService.loginWithOAuth(
+            OAuthRequest(provider = "google", idToken = "google-id-token-xyz")
+        )
+
+        val recordedRequest = mockWebServer.takeRequest()
+        assertEquals("/api/auth/oauth", recordedRequest.path)
+        val requestBody = JsonParser.parseString(recordedRequest.body.readUtf8()).asJsonObject
+        assertEquals("google", requestBody.get("provider").asString)
+        assertEquals("google-id-token-xyz", requestBody.get("idToken").asString)
+
+        assertEquals("oauth-jwt", response.accessToken)
+        assertEquals("google@example.com", response.user.email)
+    }
+
+    @Test
+    fun createGroup_returns409ThrowsHttpException() {
+        mockWebServer.enqueue(
+            MockResponse()
+                .setResponseCode(409)
+                .setBody("""{"error":"Group name already exists"}""")
+        )
+
+        val exception = assertThrows(HttpException::class.java) {
+            runBlocking {
+                apiService.createGroup(CreateGroupRequest(name = "Duplikat"))
+            }
+        }
+
+        assertEquals(409, exception.code())
+    }
+
+    @Test
+    fun joinGroup_returns404ThrowsHttpException() {
+        mockWebServer.enqueue(
+            MockResponse()
+                .setResponseCode(404)
+                .setBody("""{"error":"Invalid group code"}""")
+        )
+
+        val exception = assertThrows(HttpException::class.java) {
+            runBlocking {
+                apiService.joinGroup("missing", JoinGroupRequest(code = "0000"))
+            }
+        }
+
+        assertEquals(404, exception.code())
     }
 }

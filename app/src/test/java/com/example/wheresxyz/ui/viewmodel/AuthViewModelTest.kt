@@ -119,4 +119,88 @@ class AuthViewModelTest {
         coVerify { authRepository.logout() }
         assertEquals(AuthUiState.LoggedOut, viewModel.uiState.value)
     }
+
+    @Test
+    fun register_success_setsLoggedInState() = runTest {
+        val authResponse = AuthResponse("token", "refresh", 3600L, sampleUser)
+        coEvery { authRepository.register(any(), any(), any(), any()) } returns Result.success(authResponse)
+
+        viewModel.register("Jan", "Kowalski", "jan@example.com", "password123")
+        advanceUntilIdle()
+
+        assertEquals(AuthUiState.LoggedIn(sampleUser), viewModel.uiState.value)
+    }
+
+    @Test
+    fun register_failure_localizesEmailAlreadyInUseMessage() = runTest {
+        coEvery { authRepository.register(any(), any(), any(), any()) } returns Result.failure(
+            Exception("The email address is already in use by another account.")
+        )
+
+        viewModel.register("Jan", "Kowalski", "jan@example.com", "password123")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is AuthUiState.Error)
+        assertEquals("Ten adres e-mail jest już zarejestrowany.", (state as AuthUiState.Error).message)
+    }
+
+    @Test
+    fun register_failure_localizesWeakPasswordMessage() = runTest {
+        coEvery { authRepository.register(any(), any(), any(), any()) } returns Result.failure(
+            Exception("WEAK_PASSWORD: Password should be at least 6 characters")
+        )
+
+        viewModel.register("Jan", "Kowalski", "jan@example.com", "123")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is AuthUiState.Error)
+        assertEquals("Hasło jest za słabe. Musi mieć co najmniej 6 znaków.", (state as AuthUiState.Error).message)
+    }
+
+    @Test
+    fun updateProfile_success_updatesLoggedInUser() = runTest {
+        val updatedUser = sampleUser.copy(name = "Janusz", lastname = "Nowak")
+        coEvery { authRepository.updateProfile("Janusz", "Nowak", null) } returns Result.success(updatedUser)
+
+        viewModel.updateProfile("Janusz", "Nowak", null)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is AuthUiState.LoggedIn)
+        assertEquals("Janusz", (state as AuthUiState.LoggedIn).user.name)
+        assertEquals("Nowak", state.user.lastname)
+    }
+
+    @Test
+    fun updateProfile_failure_setsErrorState() = runTest {
+        coEvery { authRepository.updateProfile(any(), any(), any()) } returns Result.failure(
+            Exception("Not logged in")
+        )
+
+        viewModel.updateProfile("Jan", "Kowalski", null)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is AuthUiState.Error)
+        assertEquals("Not logged in", (state as AuthUiState.Error).message)
+    }
+
+    @Test
+    fun onBiometricFailed_setsLoggedOutState() = runTest {
+        viewModel.onBiometricFailed("User cancelled")
+        assertEquals(AuthUiState.LoggedOut, viewModel.uiState.value)
+    }
+
+    @Test
+    fun clearError_fromErrorState_setsLoggedOut() = runTest {
+        coEvery { authRepository.login(any(), any()) } returns Result.failure(Exception("fail"))
+        viewModel.login("jan@example.com", "wrong")
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value is AuthUiState.Error)
+
+        viewModel.clearError()
+        assertEquals(AuthUiState.LoggedOut, viewModel.uiState.value)
+    }
 }
