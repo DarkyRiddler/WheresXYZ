@@ -28,6 +28,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Today
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -170,7 +172,6 @@ private fun createAvatarBitmapDescriptor(context: Context, text: String): Bitmap
 @Composable
 fun LiveLocationMapView(
     remoteParticipants: List<RemoteParticipant>,
-    fallbackParticipants: List<RadarParticipant>,
     syncState: LocationSyncState,
     onLocationUpdate: (Double, Double) -> Unit,
     event: Event?,
@@ -200,6 +201,9 @@ fun LiveLocationMapView(
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
+                if (location.hasAccuracy() && location.accuracy > 150f) {
+                    return
+                }
                 userLatLng = LatLng(location.latitude, location.longitude)
                 onLocationUpdate(location.latitude, location.longitude)
             }
@@ -219,6 +223,9 @@ fun LiveLocationMapView(
                     else -> lastNet
                 }
                 bestLocation?.let {
+                    if (it.hasAccuracy() && it.accuracy > 150f) {
+                        return@let
+                    }
                     userLatLng = LatLng(it.latitude, it.longitude)
                     onLocationUpdate(it.latitude, it.longitude)
                 }
@@ -255,8 +262,12 @@ fun LiveLocationMapView(
         position = CameraPosition.fromLatLngZoom(userLatLng, 15f)
     }
 
+    var hasCenteredOnUser by remember { mutableStateOf(false) }
     LaunchedEffect(userLatLng) {
-        cameraPositionState.position = CameraPosition.fromLatLngZoom(userLatLng, 15f)
+        if (!hasCenteredOnUser && userLatLng != LatLng(52.2297, 21.0122)) {
+            cameraPositionState.position = CameraPosition.fromLatLngZoom(userLatLng, 15f)
+            hasCenteredOnUser = true
+        }
     }
 
     Box(modifier = modifier) {
@@ -269,8 +280,12 @@ fun LiveLocationMapView(
             val myIconDescriptor = remember(myAvatarText) {
                 createAvatarBitmapDescriptor(context, myAvatarText)
             }
+            val userMarkerState = rememberMarkerState(position = userLatLng)
+            LaunchedEffect(userLatLng) {
+                userMarkerState.position = userLatLng
+            }
             Marker(
-                state = rememberMarkerState(position = userLatLng),
+                state = userMarkerState,
                 title = "Ty (Twoja lokalizacja)",
                 icon = myIconDescriptor
             )
@@ -299,23 +314,14 @@ fun LiveLocationMapView(
                     val iconDescriptor = remember(avatarText) {
                         createAvatarBitmapDescriptor(context, avatarText)
                     }
-                    Marker(
-                        state = rememberMarkerState(position = LatLng(participant.latitude, participant.longitude)),
-                        title = participant.displayName,
-                        snippet = "Odległość: ${formatDistanceMeters(participant.distanceMeters)}",
-                        icon = iconDescriptor
-                    )
-                }
-            } else {
-                fallbackParticipants.forEach { participant ->
                     val participantLatLng = LatLng(participant.latitude, participant.longitude)
-                    val avatarText = participant.avatar.takeIf { it.isNotEmpty() && it != "👤" } ?: getInitials(participant.name)
-                    val iconDescriptor = remember(avatarText) {
-                        createAvatarBitmapDescriptor(context, avatarText)
+                    val markerState = rememberMarkerState(key = participant.userKey, position = participantLatLng)
+                    LaunchedEffect(participantLatLng) {
+                        markerState.position = participantLatLng
                     }
                     Marker(
-                        state = rememberMarkerState(position = participantLatLng),
-                        title = participant.name,
+                        state = markerState,
+                        title = participant.displayName,
                         snippet = "Odległość: ${formatDistanceMeters(participant.distanceMeters)}",
                         icon = iconDescriptor
                     )
@@ -370,13 +376,11 @@ fun LiveLocationMapView(
             val syncLabel = when (syncState) {
                 LocationSyncState.Active -> "SYNCH. LOKALIZACJI AKTYWNA"
                 LocationSyncState.Connecting -> "ŁĄCZENIE Z SYNCH..."
-                LocationSyncState.Fallback -> "LOKALIZACJA GPS (TRYB DEMO)"
                 LocationSyncState.Idle -> "LOKALIZACJA GPS AKTYWNA"
             }
             val syncColor = when (syncState) {
                 LocationSyncState.Active -> SuccessGreen
                 LocationSyncState.Connecting -> BrandCyan
-                LocationSyncState.Fallback -> BrandRose
                 LocationSyncState.Idle -> SuccessGreen
             }
             Box(
@@ -453,8 +457,8 @@ fun EventsTab(
     val isEventsLoading by eventsViewModel.isLoading.collectAsState()
     val eventsError by eventsViewModel.error.collectAsState()
 
-    LaunchedEffect(groupsList) {
-        eventsViewModel.loadEvents(groupsList)
+    LaunchedEffect(groupsList, currentUser) {
+        eventsViewModel.loadEvents(groupsList, currentUser)
     }
 
     var showCreateEventDialog by remember { mutableStateOf(false) }
@@ -486,6 +490,8 @@ fun EventsTab(
         }
     }
 
+    var isArchivalExpanded by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -500,115 +506,51 @@ fun EventsTab(
         )
 
         if (!isEventsLoading && eventsList.isNotEmpty()) {
+            val now = System.currentTimeMillis()
+            val activeEvents = eventsList.filter { it.isActive }
+            val upcomingEvents = eventsList.filter { it.startDate > now }
+            val archivalEvents = eventsList.filter { it.endDate < now }
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                items(eventsList) { event ->
-                    val isActive = event.isActive
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
-                            .clickable { selectedLiveEvent = event },
-                        colors = CardDefaults.cardColors(containerColor = DarkSurface),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = event.title,
-                                        fontSize = 18.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "Z grupą: ${event.groupName}",
-                                        fontSize = 14.sp,
-                                        color = TextSecondaryDark
-                                    )
-                                    if (event.description.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Text(
-                                            text = event.description,
-                                            fontSize = 13.sp,
-                                            color = Color.White.copy(alpha = 0.7f)
-                                        )
-                                    }
-                                }
+                // 1. Active Events
+                if (activeEvents.isNotEmpty()) {
+                    item {
+                        SectionHeader(
+                            title = "Aktualne wydarzenia",
+                            showPulseDot = true
+                        )
+                    }
+                    items(activeEvents) { event ->
+                        EventCard(event = event, onClick = { selectedLiveEvent = event })
+                    }
+                }
 
-                                if (isActive) {
-                                    Box(
-                                        modifier = Modifier
-                                            .background(SuccessGreen.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
-                                            .border(1.dp, SuccessGreen, RoundedCornerShape(10.dp))
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = "NA ŻYWO",
-                                            color = SuccessGreen,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Black
-                                        )
-                                    }
-                                }
-                            }
+                // 2. Upcoming Events
+                if (upcomingEvents.isNotEmpty()) {
+                    item {
+                        SectionHeader(title = "Nadchodzące wydarzenia")
+                    }
+                    items(upcomingEvents) { event ->
+                        EventCard(event = event, onClick = { selectedLiveEvent = event })
+                    }
+                }
 
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = formatEventDuration(event.startDate, event.endDate),
-                                    fontSize = 12.sp,
-                                    color = BrandCyan,
-                                    fontWeight = FontWeight.Medium
-                                )
-
-                                if (isActive) {
-                                    Box(
-                                        modifier = Modifier
-                                            .background(BrandRose.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                                            .border(1.dp, BrandRose.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                                            .clickable { selectedLiveEvent = event }
-                                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                imageVector = Icons.Default.Notifications,
-                                                contentDescription = "Pokaż mapę",
-                                                tint = BrandRose,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = "Podejrzyj mapę",
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = BrandRose
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    Text(
-                                        text = "Nieaktywne",
-                                        fontSize = 11.sp,
-                                        color = TextSecondaryDark,
-                                        fontWeight = FontWeight.Normal
-                                    )
-                                }
-                            }
+                // 3. Archival Events (Expandable)
+                if (archivalEvents.isNotEmpty()) {
+                    item {
+                        SectionHeader(
+                            title = "Archiwum",
+                            badgeCount = archivalEvents.size,
+                            isExpandable = true,
+                            isExpanded = isArchivalExpanded,
+                            onHeaderClick = { isArchivalExpanded = !isArchivalExpanded }
+                        )
+                    }
+                    if (isArchivalExpanded) {
+                        items(archivalEvents) { event ->
+                            EventCard(event = event, onClick = { selectedLiveEvent = event })
                         }
                     }
                 }
@@ -624,89 +566,29 @@ fun EventsTab(
         // Track user's latest GPS position
         var myLatestLatLng by remember { mutableStateOf(LatLng(52.2297, 21.0122)) }
 
-        val activeParticipants = remember(event.id) {
-            mutableStateListOf<RadarParticipant>().apply {
-                val group = groupsList.firstOrNull { it.id == event.groupId }
-                val members = group?.members?.filter { it.email != currentUser.email } ?: emptyList()
-                if (members.isNotEmpty()) {
-                    members.forEach { member ->
-                        val distance = (100..1200).random()
-                        val angle = (0..359).random().toDouble()
-                        val pLatLng = offsetFromBase(myLatestLatLng, distance, angle)
-                        add(
-                            RadarParticipant(
-                                name = "${member.name} ${member.lastname}".trim(),
-                                avatar = member.avatar,
-                                distanceMeters = distance,
-                                angleDegrees = angle,
-                                latitude = pLatLng.latitude,
-                                longitude = pLatLng.longitude
-                            )
-                        )
-                    }
-                } else {
-                    val p1 = offsetFromBase(myLatestLatLng, 150, 45.0)
-                    val p2 = offsetFromBase(myLatestLatLng, 450, 120.0)
-                    addAll(
-                        listOf(
-                            RadarParticipant("Kamil Nowak", "🧑‍💻", 150, 45.0, p1.latitude, p1.longitude),
-                            RadarParticipant("Anna Zielińska", "🙋‍♀️", 450, 120.0, p2.latitude, p2.longitude)
-                        )
-                    )
-                }
+        val displayParticipants = if (isActive) {
+            remoteParticipants.map { remote ->
+                val dist = calculateDistanceMeters(
+                    GeoPoint(myLatestLatLng.latitude, myLatestLatLng.longitude),
+                    GeoPoint(remote.latitude, remote.longitude)
+                )
+                RadarParticipant(
+                    name = remote.displayName,
+                    avatar = remote.avatar,
+                    distanceMeters = dist,
+                    angleDegrees = 0.0,
+                    latitude = remote.latitude,
+                    longitude = remote.longitude
+                )
             }
+        } else {
+            emptyList()
         }
 
         if (isActive) {
             LaunchedEffect(event.id, currentUser.email) {
                 locationSyncViewModel.startSharing(event.id, currentUser)
             }
-
-            // We no longer call stopSharing() inside DisposableEffect's onDispose or dialog dismiss
-            // to allow coordinates to continue streaming in the background as requested!
-            LaunchedEffect(event.id, syncState) {
-                if (syncState != LocationSyncState.Fallback) return@LaunchedEffect
-                while (true) {
-                    delay(3000L)
-                    for (i in activeParticipants.indices) {
-                        val participant = activeParticipants[i]
-                        val deltaDistance = (-15..15).random()
-                        val deltaAngle = (-8..8).random().toDouble()
-                        val newDistance = (participant.distanceMeters + deltaDistance).coerceIn(10, 2000)
-                        val newAngle = (participant.angleDegrees + deltaAngle + 360.0) % 360.0
-                        val pLatLng = offsetFromBase(myLatestLatLng, newDistance, newAngle)
-                        activeParticipants[i] = participant.copy(
-                            distanceMeters = newDistance,
-                            angleDegrees = newAngle,
-                            latitude = pLatLng.latitude,
-                            longitude = pLatLng.longitude
-                        )
-                    }
-                }
-            }
-        }
-
-        val displayParticipants = if (isActive) {
-            if (syncState == LocationSyncState.Active) {
-                remoteParticipants.map { remote ->
-                    val dist = calculateDistanceMeters(
-                        GeoPoint(myLatestLatLng.latitude, myLatestLatLng.longitude),
-                        GeoPoint(remote.latitude, remote.longitude)
-                    )
-                    RadarParticipant(
-                        name = remote.displayName,
-                        avatar = remote.avatar,
-                        distanceMeters = dist,
-                        angleDegrees = 0.0,
-                        latitude = remote.latitude,
-                        longitude = remote.longitude
-                    )
-                }
-            } else {
-                activeParticipants.toList()
-            }
-        } else {
-            emptyList()
         }
 
         // Calculate user's own distance to the event's start point
@@ -782,7 +664,6 @@ fun EventsTab(
                         // Live GPS Tracking Map (Fixed at the top, avoiding scroll overlap bugs!)
                         LiveLocationMapView(
                             remoteParticipants = remoteParticipants,
-                            fallbackParticipants = activeParticipants.toList(),
                             syncState = syncState,
                             onLocationUpdate = { lat, lng ->
                                 myLatestLatLng = LatLng(lat, lng)
@@ -1012,7 +893,7 @@ fun EventsTab(
                         if (isCreator || isAdmin) {
                             OutlinedButton(
                                 onClick = {
-                                    eventsViewModel.deleteEvent(event.id) {
+                                    eventsViewModel.deleteEvent(event) {
                                         Toast.makeText(context, "Usunięto wydarzenie!", Toast.LENGTH_SHORT).show()
                                         selectedLiveEvent = null
                                     }
@@ -1315,7 +1196,7 @@ fun EventsTab(
                                             endDate = endDateVal,
                                             groupId = selectedGroup.id,
                                             groupName = selectedGroup.name,
-                                            createdBy = currentUser.email,
+                                            currentUser = currentUser,
                                             startLatitude = pickedLocation.latitude,
                                             startLongitude = pickedLocation.longitude,
                                             allowedDistance = distVal
@@ -1350,50 +1231,7 @@ fun EventsTabHeaderSection(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
-        if (syncState == LocationSyncState.Active) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SuccessGreen.copy(alpha = 0.15f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-                    .border(1.dp, SuccessGreen.copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(SuccessGreen, CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Udostępniasz lokalizację w tle",
-                            color = SuccessGreen,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Text(
-                        text = "Zatrzymaj",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Black,
-                        modifier = Modifier
-                            .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                            .clickable(onClick = onStopSharing)
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
-                }
-            }
-        }
+        // We removed the location sharing banner completely as per request 9.2.
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1439,6 +1277,193 @@ fun EventsTabHeaderSection(
                     textAlign = TextAlign.Center,
                     lineHeight = 20.sp
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun SectionHeader(
+    title: String,
+    badgeCount: Int? = null,
+    isExpandable: Boolean = false,
+    isExpanded: Boolean = false,
+    onHeaderClick: (() -> Unit)? = null,
+    showPulseDot: Boolean = false
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .let { if (onHeaderClick != null) it.clickable { onHeaderClick() } else it }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (showPulseDot) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(SuccessGreen, CircleShape)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            if (badgeCount != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = badgeCount.toString(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondaryDark
+                    )
+                }
+            }
+        }
+        if (isExpandable) {
+            Icon(
+                imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = "Rozwiń",
+                tint = TextSecondaryDark
+            )
+        }
+    }
+}
+
+@Composable
+fun EventCard(
+    event: Event,
+    onClick: () -> Unit
+) {
+    val isActive = event.isActive
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(containerColor = DarkSurface),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = event.title,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Z grupą: ${event.groupName}",
+                        fontSize = 14.sp,
+                        color = TextSecondaryDark
+                    )
+                    if (event.description.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = event.description,
+                            fontSize = 13.sp,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+
+                if (isActive) {
+                    Box(
+                        modifier = Modifier
+                            .background(SuccessGreen.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                            .border(1.dp, SuccessGreen, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "NA ŻYWO",
+                            color = SuccessGreen,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val formatEventDuration = remember {
+                    { start: Long, end: Long ->
+                        val sdfDate = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                        val sdfTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                        val startDateStr = sdfDate.format(java.util.Date(start))
+                        val endDateStr = sdfDate.format(java.util.Date(end))
+                        val startTimeStr = sdfTime.format(java.util.Date(start))
+                        val endTimeStr = sdfTime.format(java.util.Date(end))
+
+                        if (startDateStr == endDateStr) {
+                            "$startDateStr $startTimeStr - $endTimeStr"
+                        } else {
+                            "$startDateStr $startTimeStr - $endDateStr $endTimeStr"
+                        }
+                    }
+                }
+                Text(
+                    text = formatEventDuration(event.startDate, event.endDate),
+                    fontSize = 12.sp,
+                    color = BrandCyan,
+                    fontWeight = FontWeight.Medium
+                )
+
+                if (isActive) {
+                    Box(
+                        modifier = Modifier
+                            .background(BrandRose.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                            .border(1.dp, BrandRose.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                            .clickable { onClick() }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Pokaż mapę",
+                                tint = BrandRose,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Podejrzyj mapę",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BrandRose
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = if (event.startDate > System.currentTimeMillis()) "Nadchodzące" else "Zakończone",
+                        fontSize = 11.sp,
+                        color = TextSecondaryDark,
+                        fontWeight = FontWeight.Normal
+                    )
+                }
             }
         }
     }

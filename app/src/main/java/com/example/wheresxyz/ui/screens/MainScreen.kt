@@ -51,6 +51,7 @@ fun MainScreen(
     val tabs = listOf("Profil", "Grupy", "Wydarzenia")
 
     val groupsViewModel: GroupsViewModel = hiltViewModel()
+    val eventsViewModel: com.example.wheresxyz.ui.viewmodel.EventsViewModel = hiltViewModel()
     
     LaunchedEffect(user.email) {
         if (user.email.isNotEmpty()) {
@@ -61,6 +62,13 @@ fun MainScreen(
     val groupsList by groupsViewModel.groups.collectAsState()
     val isLoadingGroups by groupsViewModel.isLoading.collectAsState()
     val groupsError by groupsViewModel.error.collectAsState()
+
+    // Automatically load events and schedule alarms on startup as soon as groups are loaded
+    LaunchedEffect(groupsList) {
+        if (groupsList.isNotEmpty()) {
+            eventsViewModel.loadEvents(groupsList, user)
+        }
+    }
 
     Scaffold(
         bottomBar = {
@@ -117,7 +125,7 @@ fun MainScreen(
                     onRemoveMember = { id, email -> groupsViewModel.removeMember(id, email) },
                     onClearError = { groupsViewModel.clearError() }
                 )
-                2 -> EventsTab(groupsList = groupsList, currentUser = user)
+                2 -> EventsTab(groupsList = groupsList, currentUser = user, eventsViewModel = eventsViewModel)
             }
         }
     }
