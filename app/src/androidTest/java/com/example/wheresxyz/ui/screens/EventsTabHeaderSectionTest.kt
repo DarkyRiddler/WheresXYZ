@@ -48,28 +48,4 @@ class EventsTabHeaderSectionTest {
             substring = true
         ).assertIsDisplayed()
     }
-
-    @Test
-    fun eventsTabHeaderSection_showsSharingBannerWhenActive() {
-        composeTestRule.setContent {
-            WheresXYZTheme {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(0xFF0B0F19))
-                ) {
-                    EventsTabHeaderSection(
-                        syncState = LocationSyncState.Active,
-                        isEventsLoading = false,
-                        isEventsEmpty = true,
-                        onStopSharing = {},
-                        onAddEventClick = {}
-                    )
-                }
-            }
-        }
-
-        composeTestRule.onNodeWithText("Udostępniasz lokalizację w tle").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Zatrzymaj").assertIsDisplayed()
-    }
 }

@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.wheresxyz.data.model.Event
 import com.example.wheresxyz.data.model.GroupItem
+import com.example.wheresxyz.data.model.User
 import com.example.wheresxyz.data.repository.EventsRepository
+import com.example.wheresxyz.util.EventAlarmScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,7 +16,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class EventsViewModel @Inject constructor(
-    private val eventsRepository: EventsRepository
+    private val eventsRepository: EventsRepository,
+    private val eventAlarmScheduler: EventAlarmScheduler
 ) : ViewModel() {
 
     private val _events = MutableStateFlow<List<Event>>(emptyList())
@@ -26,7 +29,7 @@ class EventsViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    fun loadEvents(groups: List<GroupItem>) {
+    fun loadEvents(groups: List<GroupItem>, currentUser: User) {
         val groupIds = groups.map { it.id }
         if (groupIds.isEmpty()) {
             _events.value = emptyList()
@@ -38,6 +41,7 @@ class EventsViewModel @Inject constructor(
             eventsRepository.getEventsForGroups(groupIds)
                 .onSuccess { list ->
                     _events.value = list
+                    eventAlarmScheduler.scheduleEvents(list, currentUser)
                 }
                 .onFailure { exception ->
                     _error.value = exception.message ?: "Błąd podczas ładowania wydarzeń"
@@ -53,7 +57,7 @@ class EventsViewModel @Inject constructor(
         endDate: Long,
         groupId: String,
         groupName: String,
-        createdBy: String,
+        currentUser: User,
         startLatitude: Double,
         startLongitude: Double,
         allowedDistance: Double,
@@ -69,12 +73,13 @@ class EventsViewModel @Inject constructor(
                 endDate = endDate,
                 groupId = groupId,
                 groupName = groupName,
-                createdBy = createdBy,
+                createdBy = currentUser.email,
                 startLatitude = startLatitude,
                 startLongitude = startLongitude,
                 allowedDistance = allowedDistance
             ).onSuccess { newEvent ->
                 _events.value = (listOf(newEvent) + _events.value).sortedByDescending { it.startDate }
+                eventAlarmScheduler.scheduleAlarms(newEvent, currentUser)
                 onSuccess()
             }.onFailure { exception ->
                 _error.value = exception.message ?: "Błąd podczas tworzenia wydarzenia"
@@ -83,13 +88,14 @@ class EventsViewModel @Inject constructor(
         }
     }
 
-    fun deleteEvent(eventId: String, onSuccess: () -> Unit) {
+    fun deleteEvent(event: Event, onSuccess: () -> Unit) {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
-            eventsRepository.deleteEvent(eventId)
+            eventsRepository.deleteEvent(event.id)
                 .onSuccess {
-                    _events.value = _events.value.filter { it.id != eventId }
+                    eventAlarmScheduler.cancelAlarms(event)
+                    _events.value = _events.value.filter { it.id != event.id }
                     onSuccess()
                 }
                 .onFailure { exception ->
