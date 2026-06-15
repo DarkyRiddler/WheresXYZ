@@ -22,10 +22,9 @@ W Android Studio: prawy klik na klasę testową → **Run**.
 
 ### `google-services.json`
 
-Plik musi leżeć w `app/google-services.json`. Jest w `.gitignore` (nie trafia do repo).
+Plik w `app/google-services.json` (projekt **where-s-xyz**). Jest w `.gitignore`.
 
-1. Pobierz go z [Firebase Console](https://console.firebase.google.com/) → Project settings → Your apps → Android (`com.example.wheresxyz`).
-2. Jeśli nie masz jeszcze projektu Firebase, możesz tymczasowo użyć lokalnego stub-a tylko pod development — ważne, żeby `package_name` to `com.example.wheresxyz`.
+Checklista Firebase (Auth, Firestore, RTDB, Maps): **[FIREBASE_SETUP.md](../FIREBASE_SETUP.md)**
 
 Bez tego pliku build padnie na tasku `:app:processDebugGoogleServices`.
 

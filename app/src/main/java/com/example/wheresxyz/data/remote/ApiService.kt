@@ -12,6 +12,7 @@ import com.example.wheresxyz.data.remote.model.OAuthRequest
 import com.example.wheresxyz.data.remote.model.RegisterRequest
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Path
 
@@ -27,7 +28,7 @@ interface ApiService {
     suspend fun loginWithOAuth(@Body body: OAuthRequest): ApiAuthResponse
 
     @GET("api/users/me")
-    suspend fun getCurrentUser(): ApiUserDto
+    suspend fun getCurrentUser(@Header("Authorization") authorization: String): ApiUserDto
 
     @GET("api/groups")
     suspend fun getGroups(): List<ApiGroupDto>

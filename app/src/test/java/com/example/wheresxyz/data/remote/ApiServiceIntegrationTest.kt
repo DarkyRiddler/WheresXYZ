@@ -217,4 +217,31 @@ class ApiServiceIntegrationTest {
 
         assertEquals(500, exception.code())
     }
+
+    @Test
+    fun getCurrentUser_sendsAuthorizationHeader() = runTest {
+        mockWebServer.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "id": "142",
+                      "userCode": 8051,
+                      "name": "John",
+                      "lastname": "Doe",
+                      "email": "johndoe@example.com"
+                    }
+                    """.trimIndent()
+                )
+        )
+
+        val user = apiService.getCurrentUser("Bearer jwt-token")
+
+        val recordedRequest = mockWebServer.takeRequest()
+        assertEquals("/api/users/me", recordedRequest.path)
+        assertEquals("Bearer jwt-token", recordedRequest.getHeader("Authorization"))
+        assertEquals("142", user.id)
+        assertEquals("johndoe@example.com", user.email)
+    }
 }
