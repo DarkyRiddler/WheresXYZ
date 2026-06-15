@@ -13,3 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Firebase Cloud Functions
+functions/node_modules/
+functions/.runtimeconfig.json
+functions/lib/
+.firebase/
