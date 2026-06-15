@@ -240,4 +240,53 @@ class GroupsRepository @Inject constructor(
             if (existing.isEmpty) return candidate
         }
     }
+
+    suspend fun addMemberByUserCode(groupId: String, userCode: Int): Result<Unit> {
+        return try {
+            val userSnapshot = withTimeout(8.seconds) {
+                firestore.collection("Users").whereEqualTo("user_code", userCode).get().await()
+            }
+            val userDoc = userSnapshot.documents.firstOrNull() ?: return Result.failure(Exception("Nie znaleziono użytkownika o podanym kodzie."))
+            
+            val userEmail = userDoc.getString("email") ?: return Result.failure(Exception("Brak adresu e-mail dla tego użytkownika."))
+            val userName = userDoc.getString("name") ?: ""
+            val userLastname = userDoc.getString("lastname") ?: ""
+            val userAvatar = userDoc.getString("avatar") ?: "👤"
+
+            val groupDoc = withTimeout(8.seconds) {
+                groupsCollection.document(groupId).get().await()
+            }
+            if (!groupDoc.exists()) {
+                return Result.failure(Exception("Nie znaleziono grupy."))
+            }
+
+            val rawMembers = groupDoc.get("members") as? List<Any?> ?: emptyList()
+            @Suppress("UNCHECKED_CAST")
+            val membersList = rawMembers.filter { it is Map<*, *> } as List<Map<String, Any>>
+
+            val alreadyMember = membersList.any { (it["email"] as? String ?: "").lowercase().trim() == userEmail.lowercase().trim() }
+            if (alreadyMember) {
+                return Result.failure(Exception("Ten użytkownik jest już członkiem tej grupy."))
+            }
+
+            val newMember = mapOf(
+                "name" to userName,
+                "lastname" to userLastname,
+                "email" to userEmail,
+                "avatar" to userAvatar,
+                "canDelete" to false,
+                "canModify" to false,
+                "canCreateEvents" to false
+            )
+            val updatedMembers = membersList + newMember
+
+            withTimeout(8.seconds) {
+                groupDoc.reference.update("members", updatedMembers).await()
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

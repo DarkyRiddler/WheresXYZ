@@ -145,6 +145,21 @@ class GroupsViewModel @Inject constructor(
         }
     }
 
+    fun addMemberByUserCode(groupId: String, userCode: Int, userEmail: String) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            groupsRepository.addMemberByUserCode(groupId, userCode)
+                .onSuccess {
+                    loadGroups(userEmail)
+                }
+                .onFailure { exception ->
+                    _error.value = exception.message ?: "Nie udało się dodać członka za pomocą kodu"
+                }
+            _isLoading.value = false
+        }
+    }
+
     fun clearError() {
         _error.value = null
     }

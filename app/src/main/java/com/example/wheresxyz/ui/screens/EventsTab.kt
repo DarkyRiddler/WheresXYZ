@@ -1428,10 +1428,8 @@ fun EventCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.fillMaxWidth()
             ) {
                 val formatEventDuration = remember {
                     { start: Long, end: Long ->
@@ -1464,6 +1462,8 @@ fun EventCard(
                         fontWeight = FontWeight.Medium
                     )
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 if (isActive) {
                     Box(

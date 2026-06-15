@@ -131,6 +131,7 @@ fun GroupsTab(
     onUpdateGroupName: (String, String) -> Unit,
     onUpdateMemberPermissions: (String, String, Boolean, Boolean, Boolean) -> Unit,
     onRemoveMember: (String, String) -> Unit,
+    onAddMemberByUserCode: (String, Int) -> Unit,
     onClearError: () -> Unit
 ) {
     val context = LocalContext.current
@@ -144,6 +145,7 @@ fun GroupsTab(
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
+    var showAddMemberDialog by remember { mutableStateOf(false) }
     var selectedGroupIdForDetails by remember { mutableStateOf<String?>(null) }
     val selectedGroupForDetails = groupsList.find { it.id == selectedGroupIdForDetails }
 
@@ -384,6 +386,59 @@ fun GroupsTab(
         )
     }
 
+    // Add Member Dialog
+    if (showAddMemberDialog && selectedGroupForDetails != null) {
+        var userCodeInput by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAddMemberDialog = false },
+            title = { Text("Dodaj członka", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Wpisz 4-cyfrowy kod użytkownika, aby dodać go do grupy:", color = TextSecondaryDark, fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = userCodeInput,
+                        onValueChange = { input ->
+                            if (input.length <= 4 && input.all { it.isDigit() }) {
+                                userCodeInput = input
+                            }
+                        },
+                        label = { Text("Kod użytkownika", color = TextSecondaryDark) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = BrandIndigo,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val code = userCodeInput.toIntOrNull()
+                        if (code != null) {
+                            onAddMemberByUserCode(selectedGroupForDetails.id, code)
+                            showAddMemberDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandIndigo),
+                    enabled = userCodeInput.length == 4
+                ) {
+                    Text("Dodaj", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddMemberDialog = false }) {
+                    Text("Anuluj", color = Color.White)
+                }
+            },
+            containerColor = DarkSurface
+        )
+    }
+
     // Details Overlay Dialog
     if (selectedGroupForDetails != null) {
         val group = selectedGroupForDetails
@@ -511,12 +566,27 @@ fun GroupsTab(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Text(
-                        text = "Członkowie (${group.members.size})",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Członkowie (${group.members.size})",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        if (group.isAdmin) {
+                            TextButton(
+                                onClick = { showAddMemberDialog = true },
+                                colors = ButtonDefaults.textButtonColors(contentColor = BrandCyan),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text("Dodaj kodem", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
