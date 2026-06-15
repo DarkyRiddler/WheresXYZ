@@ -129,4 +129,10 @@ class LocationSyncViewModel @Inject constructor(
 
         _remoteParticipants.value = recalculateParticipantDistances(current, GeoPoint(latitude, longitude))
     }
+
+    fun sendPing(targetEmail: String, senderName: String) {
+        viewModelScope.launch {
+            locationRepository.sendPing(targetEmail, senderName)
+        }
+    }
 }

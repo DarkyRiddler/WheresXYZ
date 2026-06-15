@@ -8,4 +8,5 @@ interface LocationRepository {
     suspend fun publishLocation(eventId: String, location: SharedLocation): Result<Unit>
     fun observeLocations(eventId: String): Flow<List<SharedLocation>>
     suspend fun stopSharing(eventId: String, userKey: String): Result<Unit>
+    suspend fun sendPing(targetEmail: String, senderName: String): Result<Unit>
 }

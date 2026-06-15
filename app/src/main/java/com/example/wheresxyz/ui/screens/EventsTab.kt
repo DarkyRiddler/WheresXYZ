@@ -74,7 +74,8 @@ data class RadarParticipant(
     val distanceMeters: Int,
     val angleDegrees: Double,
     val latitude: Double = 0.0,
-    val longitude: Double = 0.0
+    val longitude: Double = 0.0,
+    val userKey: String = ""
 )
 
 private fun offsetFromBase(base: LatLng, distanceMeters: Int, angleDegrees: Double): LatLng {
@@ -578,7 +579,8 @@ fun EventsTab(
                     distanceMeters = dist,
                     angleDegrees = 0.0,
                     latitude = remote.latitude,
-                    longitude = remote.longitude
+                    longitude = remote.longitude,
+                    userKey = remote.userKey
                 )
             }
         } else {
@@ -796,6 +798,8 @@ fun EventsTab(
                                                 .background(BrandRose.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
                                                 .border(1.dp, BrandRose.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                                                 .clickable {
+                                                    val senderName = "${currentUser.name} ${currentUser.lastname}".trim()
+                                                    locationSyncViewModel.sendPing(participant.userKey, senderName)
                                                     Toast.makeText(context, "Ping wysłany do: ${participant.name}!", Toast.LENGTH_SHORT).show()
                                                 }
                                                 .padding(horizontal = 8.dp, vertical = 4.dp)
