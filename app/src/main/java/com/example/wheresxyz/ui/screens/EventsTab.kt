@@ -598,35 +598,6 @@ fun EventsTab(
         )
         val isIOutside = myDistToStart > event.allowedDistance
 
-        var wasIOutside by remember { mutableStateOf(false) }
-        LaunchedEffect(isIOutside) {
-            if (isIOutside && !wasIOutside) {
-                Toast.makeText(context, "⚠️ Opuściłeś obszar wydarzenia!", Toast.LENGTH_LONG).show()
-            } else if (!isIOutside && wasIOutside) {
-                Toast.makeText(context, "✅ Wróciłeś do obszaru wydarzenia.", Toast.LENGTH_LONG).show()
-            }
-            wasIOutside = isIOutside
-        }
-
-        // Track transitions of other participants (real or simulated) leaving/entering the allowed area
-        val outsideUserKeys = remember { mutableStateMapOf<String, Boolean>() }
-        LaunchedEffect(displayParticipants) {
-            displayParticipants.forEach { participant ->
-                val dist = calculateDistanceMeters(
-                    GeoPoint(participant.latitude, participant.longitude),
-                    GeoPoint(event.startLatitude, event.startLongitude)
-                )
-                val isOutside = dist > event.allowedDistance
-                val wasOutside = outsideUserKeys[participant.name] == true
-                if (isOutside && !wasOutside) {
-                    outsideUserKeys[participant.name] = true
-                    Toast.makeText(context, "⚠️ ${participant.name} opuścił obszar wydarzenia!", Toast.LENGTH_SHORT).show()
-                } else if (!isOutside && wasOutside) {
-                    outsideUserKeys[participant.name] = false
-                    Toast.makeText(context, "✅ ${participant.name} wrócił do obszaru wydarzenia.", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
 
         androidx.compose.ui.window.Dialog(
             onDismissRequest = {
