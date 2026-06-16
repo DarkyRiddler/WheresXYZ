@@ -53,6 +53,7 @@ class GroupsTabTest {
                         onUpdateGroupName = { _, _ -> },
                         onUpdateMemberPermissions = { _, _, _, _, _ -> },
                         onRemoveMember = { _, _ -> },
+                        onAddMemberByUserCode = { _, _ -> },
                         onClearError = {}
                     )
                 }
@@ -87,6 +88,7 @@ class GroupsTabTest {
                         onUpdateGroupName = { _, _ -> },
                         onUpdateMemberPermissions = { _, _, _, _, _ -> },
                         onRemoveMember = { _, _ -> },
+                        onAddMemberByUserCode = { _, _ -> },
                         onClearError = {}
                     )
                 }
@@ -117,6 +119,7 @@ class GroupsTabTest {
                         onUpdateGroupName = { _, _ -> },
                         onUpdateMemberPermissions = { _, _, _, _, _ -> },
                         onRemoveMember = { _, _ -> },
+                        onAddMemberByUserCode = { _, _ -> },
                         onClearError = {}
                     )
                 }
@@ -153,6 +156,7 @@ class GroupsTabTest {
                         onUpdateGroupName = { _, _ -> },
                         onUpdateMemberPermissions = { _, _, _, _, _ -> },
                         onRemoveMember = { _, _ -> },
+                        onAddMemberByUserCode = { _, _ -> },
                         onClearError = {}
                     )
                 }
@@ -204,6 +208,7 @@ class GroupsTabTest {
                         onUpdateGroupName = { _, _ -> },
                         onUpdateMemberPermissions = { _, _, _, _, _ -> },
                         onRemoveMember = { _, _ -> },
+                        onAddMemberByUserCode = { _, _ -> },
                         onClearError = {}
                     )
                 }
