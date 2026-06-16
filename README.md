@@ -1,72 +1,72 @@
-# Where's XYZ 📍 - Real-time Location & Group Management
+# Where's XYZ 📍 - Lokalizacja w czasie rzeczywistym i zarządzanie grupami
 
-**Where's XYZ** is a comprehensive Android application built for users who value staying connected. Whether you're traveling in a group, meeting up with friends in a crowded city, or coordinating a family outing, this app provides the tools to ensure no one gets lost.
-
----
-
-## 🚀 Key Features in Detail
-
-### 🔐 Advanced Security & Auth
-*   **Firebase Authentication**: Robust email and password-based registration and login system.
-*   **Biometric Integration**: Quick and secure access using Fingerprint or Face Recognition via Android BiometricPrompt API.
-*   **Encrypted Storage**: Sensitive user data is handled using `EncryptedSharedPreferences` for local persistence.
-
-### 👥 Dynamic Group Coordination
-*   **Unique Group Codes**: Groups are identified by easy-to-share 4-digit codes, simplifying the joining process.
-*   **Many-to-Many Relationships**: A flexible system where users can be members of multiple circles (e.g., "Family", "Work Friends", "Travel Squad") simultaneously.
-*   **Real-time Synchronization**: Powered by Firestore, every group change (new member, name change) is reflected instantly across all devices.
-
-### 🗺️ Live Mapping & Interaction
-*   **Google Maps Integration**: High-precision location tracking using the Google Maps SDK for Android.
-*   **Interactive Pings (1:N)**: A unique communication system allowing users to send pre-defined or custom emoji-based pings to catch attention without typing.
-*   **Event Management (1:1)**: Every group can host a specific event with dedicated descriptions, photos, and timeframes, visible to all members on the map.
+**Where's XYZ** to kompleksowa aplikacja na system Android, stworzona dla osób, które chcą pozostać w stałym kontakcie ze swoimi bliskimi lub grupą znajomych. Niezależnie od tego, czy podróżujesz w grupie, spotykasz się ze znajomymi w zatłoczonym mieście, czy organizujesz rodzinną wycieczkę, ta aplikacja dostarcza narzędzi, dzięki którym nikt się nie zgubi.
 
 ---
 
-## 🛠 Technical Architecture
+## 🚀 Kluczowe Funkcje w Szczegółach
 
-The project follows the **Clean Architecture** principles and **MVVM (Model-View-ViewModel)** design pattern to ensure scalability and testability.
+### 🔐 Zaawansowane Bezpieczeństwo i Autoryzacja
+*   **Firebase Authentication**: Solidny system rejestracji i logowania oparty na e-mailu i haśle.
+*   **Integracja Biometryczna**: Szybki i bezpieczny dostęp do aplikacji za pomocą odcisku palca lub rozpoznawania twarzy (Android BiometricPrompt API).
+*   **Szyfrowane Przechowywanie**: Wrażliwe dane użytkownika są obsługiwane za pomocą `EncryptedSharedPreferences`, co gwarantuje bezpieczeństwo lokalne.
 
-*   **Jetpack Compose**: 100% declarative UI built with modern Material 3 components.
-*   **Hilt (Dagger)**: Standardized dependency injection for modular code.
-*   **Kotlin Coroutines & Flow**: Asynchronous programming for smooth, non-blocking UI and real-time data streams.
+### 👥 Dynamiczna Koordynacja Grupowa
+*   **Unikalne Kody Grup**: Grupy są identyfikowane przez łatwe do udostępnienia 4-cyfrowe kody, co upraszcza proces dołączania.
+*   **Relacje Wiele-do-Wielu (M:N)**: Elastyczny system, w którym użytkownicy mogą być członkami wielu kręgów jednocześnie (np. "Rodzina", "Znajomi z pracy", "Ekipa na wakacje").
+*   **Synchronizacja w Czasie Rzeczywistym**: Dzięki Firestore każda zmiana w grupie (nowy członek, zmiana nazwy) jest natychmiast widoczna na wszystkich urządzeniach.
+
+### 🗺️ Mapy Live i Interakcja
+*   **Integracja z Google Maps**: Precyzyjne śledzenie lokalizacji członków grupy na mapie przy użyciu Google Maps SDK.
+*   **Interaktywne Pingi (1:N)**: Unikalny system komunikacji pozwalający wysyłać szybkie powiadomienia emoji (Pingi), aby przyciągnąć uwagę bez konieczności pisania.
+*   **Zarządzanie Wydarzeniami (1:1)**: Każda grupa może posiadać przypisane wydarzenie z opisem, zdjęciem i ramami czasowymi, widoczne dla wszystkich członków.
+
+---
+
+## 🛠 Architektura Techniczna
+
+Projekt opiera się na zasadach **Clean Architecture** oraz wzorcu projektowym **MVVM (Model-View-ViewModel)**, co zapewnia skalowalność i łatwość testowania.
+
+*   **Jetpack Compose**: W 100% deklaratywny interfejs użytkownika zbudowany z nowoczesnych komponentów Material 3.
+*   **Hilt (Dagger)**: Standaryzowane wstrzykiwanie zależności dla modułowego kodu.
+*   **Kotlin Coroutines & Flow**: Programowanie asynchroniczne zapewniające płynność działania UI i strumieni danych czasu rzeczywistego.
 *   **Firebase Suite**:
-    *   **Cloud Firestore**: Real-time NoSQL database.
-    *   **Firebase Auth**: User management.
-    *   **Cloud Storage**: For storing user avatars and group photos.
-*   **Retrofit & Gson**: Ready-to-use networking stack for future REST API integrations.
+    *   **Cloud Firestore**: NoSQL-owa baza danych czasu rzeczywistego.
+    *   **Firebase Auth**: Zarządzanie użytkownikami.
+    *   **Cloud Messaging**: Powiadomienia push.
+*   **Retrofit & Gson**: Gotowy stos sieciowy do przyszłych integracji z zewnętrznymi API REST.
 
 ---
 
-## 📊 Database Schema (Firestore)
+## 📊 Schemat Bazy Danych (Firestore)
 
-| Collection | Description | Relationships |
+| Kolekcja | Opis | Relacje |
 | :--- | :--- | :--- |
-| `users` | User profiles, settings, and group lists. | `groups` (Many-to-Many) |
-| `groups` | Group metadata, codes, and member UIDs. | `users` (M:M), `events` (1:1) |
-| `events` | Details for group-specific gatherings. | `groups` (1:1) |
-| `pings` | Interactive alerts sent by users. | `users` (1:N) |
+| `users` | Profile użytkowników, ustawienia i listy grup. | `groups` (Wiele-do-Wielu) |
+| `groups` | Metadane grup, kody i identyfikatory członków. | `users` (M:M), `events` (1:1) |
+| `events` | Szczegóły spotkań specyficznych dla danej grupy. | `groups` (1:1) |
+| `pings` | Interaktywne alerty wysyłane przez użytkowników. | `users` (1:N) |
 
 ---
 
-## ⚙️ Setup and Installation
+## ⚙️ Konfiguracja i Instalacja
 
-### Prerequisites
-*   Android Studio Ladybug or newer.
+### Wymagania wstępne
+*   Android Studio Ladybug lub nowsze.
 *   JDK 17+.
-*   A Firebase Project.
+*   Projekt w konsoli Firebase.
 
-### Steps
-1.  **Clone the Repo**: `git clone https://github.com/your-username/wheresxyz.git`
-2.  **Firebase Config**: 
-    *   Go to Firebase Console, create an Android app with package `com.example.wheresxyz`.
-    *   Download `google-services.json` and place it in the `app/` directory.
-3.  **API Keys**:
-    *   Open `local.properties` in the root folder.
-    *   Add: `MAPS_API_KEY=your_google_maps_key_here`.
-4.  **Build**: Sync Gradle and click "Run".
+### Kroki instalacji
+1.  **Sklonuj repozytorium**: `git clone https://github.com/twoj-uzytkownik/wheresxyz.git`
+2.  **Konfiguracja Firebase**: 
+    *   W Firebase Console stwórz aplikację Android o pakiecie `com.example.wheresxyz`.
+    *   Pobierz plik `google-services.json` i umieść go w katalogu `app/`.
+3.  **Klucze API**:
+    *   Otwórz plik `local.properties` w głównym folderze projektu.
+    *   Dodaj linię: `MAPS_API_KEY=twoj_klucz_google_maps`.
+4.  **Build**: Zsynchronizuj Gradle i uruchom projekt (Run).
 
 ---
 
-## 🛡️ License
-This project was developed for educational purposes as part of a Semester 6 project.
+## 🛡️ Licencja
+Projekt stworzony w celach edukacyjnych jako część projektu na 6 semestr studiów.
